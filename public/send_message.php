@@ -1,17 +1,13 @@
 <?php
 require_once '../includes/Itaidbh.inc.php';
-
-// Set header to return JSON so the JavaScript fetch works correctly
 header('Content-Type: application/json');
 
-// Inside send_message.php
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $token   = $_POST['token'] ?? '';
     $sender  = $_POST['sender'] ?? 'Guest';
-    $message = $_POST['message'] ?? ''; // This can now be an empty string
+    $message = $_POST['message'] ?? ''; 
     $price   = !empty($_POST['quote_price']) ? $_POST['quote_price'] : null;
 
-    // Only block if the token is missing
     if (empty($token)) {
         echo json_encode(['status' => 'error', 'message' => 'Invalid Session']);
         exit;
