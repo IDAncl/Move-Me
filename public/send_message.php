@@ -13,6 +13,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         exit;
     }
 
+    // NEW: Check if the session is actually active
+    $checkStmt = $pdo->prepare("SELECT is_active FROM chat_sessions WHERE chat_token = ?");
+    $checkStmt->execute([$token]);
+    $sessionStatus = $checkStmt->fetch();
+
+    if (!$sessionStatus || (int)$sessionStatus['is_active'] === 0) {
+        echo json_encode(['status' => 'error', 'message' => 'This chat is closed.']);
+        exit;
+    }
+
+    // Only insert if active
     $stmt = $pdo->prepare("INSERT INTO chat_messages (chat_token, sender_name, message, quote_price) VALUES (?, ?, ?, ?)");
     $success = $stmt->execute([$token, $sender, $message, $price]);
     

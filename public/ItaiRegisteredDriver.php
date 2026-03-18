@@ -71,7 +71,9 @@ try {
         </div>
         <nav class="flex-grow space-y-4">
             <a href="#" class="flex items-center gap-3 p-3 bg-white/20 rounded-lg"><i class="fas fa-th-large w-5"></i> Dashboard</a>
-            <a href="#" class="flex items-center gap-3 p-3 hover:bg-white/10 rounded-lg transition"><i class="fas fa-route w-5"></i> My Routes</a>
+            <a href="my_routes.php" class="flex items-center gap-3 p-3 hover:bg-white/10 rounded-lg transition">
+                <i class="fas fa-route w-5"></i> My Routes
+            </a>
             <a href="#" class="flex items-center gap-3 p-3 hover:bg-white/10 rounded-lg transition"><i class="fas fa-comment-dots w-5"></i> Messages</a>
         </nav>
         <div class="pt-6 border-t border-white/20">
