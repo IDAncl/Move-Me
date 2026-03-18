@@ -3,9 +3,56 @@ session_start();
 require_once '../includes/Itaidbh.inc.php';
 
 $token = $_GET['token'] ?? '';
+$amount = $_GET['amount'] ?? '0';
+$status = $_GET['status'] ?? ''; 
 $userRole = $_SESSION['user_role'] ?? 'guest';
 
-// Fetch the full delivery and session data
+// --- DATABASE UPDATE LOGIC (CLOSING THE CHAT) ---
+if (!empty($token) && $status === 'paid') {
+    try {
+        $pdo->beginTransaction();
+
+        // 1. Get the session details to verify it's still active and get the driver
+        $stmt = $pdo->prepare("SELECT chosen_driver_id, is_active FROM chat_sessions WHERE chat_token = ?");
+        $stmt->execute([$token]);
+        $session = $stmt->fetch();
+
+        // Only proceed if the session exists and is currently active (is_active = 1)
+        if ($session && $session['is_active'] == 1) {
+            $driverName = $session['chosen_driver_id'];
+
+            // 2. Get the final price from the last quote message sent by that driver
+            $priceStmt = $pdo->prepare("SELECT quote_price FROM chat_messages 
+                                        WHERE chat_token = ? AND sender_name = ? AND quote_price IS NOT NULL 
+                                        ORDER BY created_at DESC LIMIT 1");
+            $priceStmt->execute([$token, $driverName]);
+            $priceData = $priceStmt->fetch();
+            
+            // Fallback: If no quote found in DB, use the amount from the URL
+            $finalPrice = ($priceData && $priceData['quote_price'] > 0) ? $priceData['quote_price'] : $amount;
+
+            // 3. Close the chat session
+            $closeStmt = $pdo->prepare("UPDATE chat_sessions SET is_active = 0 WHERE chat_token = ?");
+            $closeStmt->execute([$token]);
+
+            // 4. Insert the final system confirmation message
+            $systemMsg = "🤝 Payment Received! Booking Confirmed with $driverName for ₪$finalPrice. This chat is now closed.";
+            $msgStmt = $pdo->prepare("INSERT INTO chat_messages (chat_token, sender_name, message) VALUES (?, 'System', ?)");
+            $msgStmt->execute([$token, $systemMsg]);
+
+            $pdo->commit();
+        } else {
+            // If session is already 0, we just roll back and show the page (already processed)
+            $pdo->rollBack();
+        }
+    } catch (Exception $e) {
+        $pdo->rollBack();
+        // error_log($e->getMessage()); // Optional: for debugging
+    }
+}
+// --- END DATABASE UPDATE LOGIC ---
+
+// Fetch the full delivery and session data for the UI
 $stmt = $pdo->prepare("
     SELECT d.*, cs.chosen_driver_id 
     FROM chat_sessions cs 
@@ -15,7 +62,7 @@ $stmt = $pdo->prepare("
 $stmt->execute([$token]);
 $data = $stmt->fetch();
 
-// Temporary debug for previewing (as we did before)
+// Temporary debug for previewing
 if (!$data && $token === 'test') {
     $data = [
         'full_name' => 'Client Name',

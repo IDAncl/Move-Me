@@ -4,8 +4,14 @@ require_once '../includes/Itaidbh.inc.php';
 
 // Helper function for Google Maps Travel Time
 function getTravelTime($origin, $destination, $moveDate, $moveTime) {
-    $apiKey = 'YOUR_GOOGLE_MAPS_API_KEY'; 
+    $apiKey = 'YOUR_GOOGLE_MAPS_API_KEY'; // Replace with your actual key
     $departureTimestamp = strtotime("$moveDate $moveTime");
+    
+    // Safety check: if departure is in the past, Google Matrix might fail
+    if ($departureTimestamp < time()) {
+        $departureTimestamp = time();
+    }
+
     $url = "https://maps.googleapis.com/maps/api/distancematrix/json?origins=" . urlencode($origin) . 
            "&destinations=" . urlencode($destination) . 
            "&departure_time=" . $departureTimestamp . 
@@ -20,18 +26,49 @@ function getTravelTime($origin, $destination, $moveDate, $moveTime) {
 $driverName = $_SESSION['user_name'] ?? 'Driver';
 $profilePic = "https://ui-avatars.com/api/?name=" . urlencode($driverName) . "&background=6366f1&color=fff&bold=true"; 
 
+// --- START OF SEARCH LOGIC ---
+$whereClauses = ["(cs.is_active = 1 OR cs.is_active IS NULL)"];
+$params = [];
+
+// 1. Date Filter
+if (!empty($_GET['search_date'])) {
+    $whereClauses[] = "d.moving_date = :search_date";
+    $params[':search_date'] = $_GET['search_date'];
+}
+
+// 2. Time Filter (Calculates a window of -15 to +15 minutes)
+if (!empty($_GET['search_time'])) {
+    $searchTime = $_GET['search_time'];
+    $startTime = date('H:i:s', strtotime($searchTime . ' -15 minutes'));
+    $endTime = date('H:i:s', strtotime($searchTime . ' +15 minutes'));
+    
+    $whereClauses[] = "d.preferred_time BETWEEN :start_time AND :end_time";
+    $params[':start_time'] = $startTime;
+    $params[':end_time'] = $endTime;
+}
+
+// 3. Region Filter (Searching within the pickup_location text)
+if (!empty($_GET['region'])) {
+    $whereClauses[] = "d.pickup_location LIKE :region";
+    $params[':region'] = '%' . $_GET['region'] . '%';
+}
+
+$whereSql = implode(" AND ", $whereClauses);
+
 try {
     $sql = "SELECT d.*, cs.chat_token 
             FROM deliveries d 
             LEFT JOIN chat_sessions cs ON d.id = cs.delivery_id 
-            WHERE cs.is_active = 1 OR cs.is_active IS NULL
+            WHERE $whereSql
             ORDER BY d.created_at DESC";
     $stmt = $pdo->prepare($sql);
-    $stmt->execute();
+    $stmt->execute($params);
     $deliveries = $stmt->fetchAll(PDO::FETCH_ASSOC);
 } catch (PDOException $e) {
     $dbError = $e->getMessage();
+    $deliveries = [];
 }
+// --- END OF SEARCH LOGIC ---
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -65,10 +102,9 @@ try {
             <div class="flex items-center gap-3 text-2xl font-black tracking-tighter mb-12">
                 <i class="fas fa-truck-fast text-indigo-400"></i> MoveMe
             </div>
-            
             <nav class="space-y-2">
                 <a href="#" class="active-nav flex items-center gap-4 p-4 rounded-2xl transition-all">
-                    <i class="fas fa-grid-2 w-5 text-indigo-400"></i> 
+                    <i class="fas fa-th-large w-5 text-indigo-400"></i> 
                     <span class="font-bold text-sm">Dashboard</span>
                 </a>
                 <a href="my_routes.php" class="flex items-center gap-4 p-4 hover:bg-white/5 rounded-2xl transition-all group">
@@ -81,7 +117,6 @@ try {
                 </a>
             </nav>
         </div>
-
         <div class="mt-auto p-8">
             <a href="logout.php" class="flex items-center gap-4 p-4 bg-red-500/10 text-red-400 rounded-2xl hover:bg-red-500 hover:text-white transition-all font-bold text-sm">
                 <i class="fas fa-power-off"></i> Logout
@@ -107,6 +142,35 @@ try {
             </div>
         </div>
 
+        <div class="bg-white p-6 rounded-[2.5rem] shadow-sm border border-slate-100 mb-10">
+            <form method="GET" class="grid grid-cols-1 md:grid-cols-4 gap-4 items-end">
+                <div>
+                    <label class="text-[10px] font-black uppercase text-slate-400 mb-2 block ml-1">Date</label>
+                    <input type="date" name="search_date" value="<?php echo htmlspecialchars($_GET['search_date'] ?? ''); ?>" 
+                           class="w-full bg-slate-50 border-none rounded-2xl p-4 text-sm font-bold focus:ring-2 focus:ring-indigo-500 transition-all">
+                </div>
+                <div>
+                    <label class="text-[10px] font-black uppercase text-slate-400 mb-2 block ml-1">Preferred Time</label>
+                    <input type="time" name="search_time" value="<?php echo htmlspecialchars($_GET['search_time'] ?? ''); ?>"
+                           class="w-full bg-slate-50 border-none rounded-2xl p-4 text-sm font-bold focus:ring-2 focus:ring-indigo-500 transition-all">
+                </div>
+                <div>
+                    <label class="text-[10px] font-black uppercase text-slate-400 mb-2 block ml-1">Region</label>
+                    <select name="region" class="w-full bg-slate-50 border-none rounded-2xl p-4 text-sm font-bold focus:ring-2 focus:ring-indigo-500 appearance-none transition-all">
+                        <option value="">All Regions</option>
+                        <option value="North" <?php echo ($_GET['region'] ?? '') == 'North' ? 'selected' : ''; ?>>North</option>
+                        <option value="South" <?php echo ($_GET['region'] ?? '') == 'South' ? 'selected' : ''; ?>>South</option>
+                        <option value="East" <?php echo ($_GET['region'] ?? '') == 'East' ? 'selected' : ''; ?>>East</option>
+                        <option value="West" <?php echo ($_GET['region'] ?? '') == 'West' ? 'selected' : ''; ?>>West</option>
+                        <option value="Center" <?php echo ($_GET['region'] ?? '') == 'Center' ? 'selected' : ''; ?>>Center</option>
+                    </select>
+                </div>
+                <button type="submit" class="bg-indigo-600 text-white font-black text-xs uppercase tracking-widest py-4 px-6 rounded-2xl hover:bg-slate-900 transition-all shadow-xl shadow-indigo-100 active:scale-95">
+                    <i class="fas fa-sliders mr-2"></i> Apply Filters
+                </button>
+            </form>
+        </div>
+
         <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-12">
             <div class="bg-white p-6 rounded-[2rem] shadow-sm border border-slate-100 relative overflow-hidden group">
                 <div class="absolute top-0 right-0 p-4 opacity-10 group-hover:scale-110 transition-transform">
@@ -117,7 +181,7 @@ try {
             </div>
             
             <div class="bg-indigo-600 p-6 rounded-[2rem] shadow-xl shadow-indigo-100 text-white relative overflow-hidden">
-                <p class="text-indigo-200 text-xs font-black uppercase tracking-widest">Open Jobs</p>
+                <p class="text-indigo-200 text-xs font-black uppercase tracking-widest">Jobs Found</p>
                 <h2 class="text-3xl font-black mt-2"><?php echo count($deliveries); ?></h2>
             </div>
 
@@ -135,51 +199,82 @@ try {
         <div class="space-y-6">
             <div class="flex items-center justify-between px-2">
                 <h3 class="text-xl font-extrabold text-slate-900">Available Jobs</h3>
-                <div class="flex gap-2">
-                    <span class="bg-emerald-100 text-emerald-700 text-[10px] font-black px-3 py-1.5 rounded-full uppercase tracking-tighter">Live Updates</span>
-                </div>
+                <?php if(!empty($_GET)): ?>
+                    <a href="ItaiRegisteredDriver.php" class="text-xs font-black text-indigo-600 uppercase tracking-widest hover:underline">Clear Filters</a>
+                <?php endif; ?>
             </div>
 
-            <div class="grid grid-cols-1 gap-4">
-                <?php foreach ($deliveries as $row): ?>
-                <div class="bg-white p-6 rounded-[2.5rem] shadow-sm border border-slate-50 hover:shadow-xl hover:shadow-slate-200/50 transition-all group">
-                    <div class="flex flex-col md:flex-row md:items-center justify-between gap-6">
+            <?php if (empty($deliveries)): ?>
+                <div class="bg-white p-12 rounded-[2.5rem] text-center border-2 border-dashed border-slate-200">
+                    <i class="fas fa-search text-4xl text-slate-300 mb-4"></i>
+                    <p class="text-slate-500 font-bold">No jobs match your search criteria.</p>
+                </div>
+            <?php else: ?>
+                <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                    <?php foreach ($deliveries as $job): 
+                        $wazeUrl = "https://waze.com/ul?q=" . urlencode($job['pickup_location']) . "&navigate=yes";
+                        $estDriveTime = getTravelTime($job['pickup_location'], $job['delivery_location'], $job['moving_date'], $job['preferred_time']);
                         
-                        <div class="flex-grow space-y-4">
-                            <div class="flex items-center gap-2">
-                                <span class="text-[10px] font-black bg-slate-100 text-slate-500 px-3 py-1 rounded-lg uppercase"><?php echo htmlspecialchars($row['object_type'] ?? 'General'); ?></span>
-                                <span class="text-[10px] font-black bg-amber-50 text-amber-600 px-3 py-1 rounded-lg uppercase">
-                                    <i class="fas fa-calendar-day mr-1"></i><?php echo date('M d', strtotime($row['moving_date'])); ?>
-                                </span>
-                            </div>
-
-                            <div class="flex flex-col gap-1">
-                                <div class="flex items-center gap-3">
-                                    <div class="w-2 h-2 rounded-full bg-indigo-500"></div>
-                                    <span class="font-extrabold text-slate-800 text-lg"><?php echo htmlspecialchars($row['pickup_location']); ?></span>
-                                </div>
-                                <div class="w-0.5 h-4 border-l-2 border-dashed border-slate-200 ml-1"></div>
-                                <div class="flex items-center gap-3">
-                                    <div class="w-2 h-2 rounded-full bg-emerald-500"></div>
-                                    <span class="font-extrabold text-slate-800 text-lg"><?php echo htmlspecialchars($row['delivery_location']); ?></span>
-                                </div>
-                            </div>
-                        </div>
-
-                        <div class="flex flex-col sm:flex-row md:flex-col gap-3 min-w-[180px]">
-                            <div class="text-center md:text-right px-4">
-                                <p class="text-[10px] font-black text-slate-400 uppercase tracking-widest">Est. Drive Time</p>
-                                <p class="text-sm font-black text-slate-900"><?php echo getTravelTime($row['pickup_location'], $row['delivery_location'], $row['moving_date'], $row['preferred_time']); ?></p>
-                            </div>
+                        // Construct the link to the chat/bidding page using the token
+                        $chatUrl = "chat.php?token=" . urlencode($job['chat_token']); 
+                    ?>
+                        <div class="bg-white rounded-[2.5rem] shadow-[0_20px_50px_rgba(0,0,0,0.04)] border border-slate-50 overflow-hidden p-6 hover:shadow-lg transition-all duration-300">
                             
-                            <a href="chat.php?token=<?php echo $row['chat_token']; ?>" class="flex items-center justify-center gap-2 bg-slate-900 text-white py-4 px-6 rounded-2xl font-black text-xs hover:bg-indigo-600 transition-all shadow-lg active:scale-95">
-                                CONTACT & QUOTE <i class="fas fa-chevron-right text-[10px] opacity-50"></i>
+                            <div class="flex justify-between items-center mb-6">
+                                <span class="bg-indigo-50 text-indigo-600 text-[10px] font-black px-3 py-1 rounded-full uppercase tracking-widest">
+                                    <?php echo htmlspecialchars($job['object_type'] ?? 'General'); ?>
+                                </span>
+                                <div class="flex items-center gap-2 text-slate-400">
+                                    <i class="far fa-calendar text-xs"></i>
+                                    <span class="text-xs font-bold uppercase tracking-tighter text-slate-600">
+                                        <?php echo date('M d, Y', strtotime($job['moving_date'])); ?>
+                                    </span>
+                                </div>
+                            </div>
+
+                            <div class="relative space-y-8 mb-8">
+                                <div class="absolute left-[11px] top-3 w-[2px] h-[calc(100%-24px)] bg-slate-100"></div>
+                                <div class="flex gap-4 items-start relative">
+                                    <div class="w-6 h-6 rounded-full bg-white border-4 border-slate-100 shadow-sm flex items-center justify-center z-10">
+                                        <div class="w-2 h-2 rounded-full bg-slate-400"></div>
+                                    </div>
+                                    <div class="flex-1">
+                                        <p class="text-[10px] font-black text-slate-400 uppercase tracking-widest leading-none mb-1">Pickup</p>
+                                        <h3 class="text-base font-bold text-slate-800 leading-tight"><?php echo htmlspecialchars($job['pickup_location']); ?></h3>
+                                        <a href="<?php echo $wazeUrl; ?>" target="_blank" class="inline-flex items-center gap-1.5 mt-2 text-indigo-600 text-[11px] font-black uppercase tracking-wider hover:opacity-70">
+                                            <i class="fab fa-waze text-sm"></i> Navigate to Pickup
+                                        </a>
+                                    </div>
+                                </div>
+                                <div class="flex gap-4 items-start relative">
+                                    <div class="w-6 h-6 rounded-full bg-white border-4 border-indigo-50 shadow-sm flex items-center justify-center z-10">
+                                        <div class="w-2 h-2 rounded-full bg-indigo-600"></div>
+                                    </div>
+                                    <div class="flex-1">
+                                        <p class="text-[10px] font-black text-indigo-400 uppercase tracking-widest leading-none mb-1">Destination</p>
+                                        <h3 class="text-base font-bold text-slate-800 leading-tight"><?php echo htmlspecialchars($job['delivery_location']); ?></h3>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="grid grid-cols-2 gap-4 py-4 border-t border-slate-50 mb-6">
+                                <div>
+                                    <p class="text-[9px] font-black text-slate-400 uppercase mb-1">Est. Drive Time</p>
+                                    <p class="text-sm font-extrabold text-slate-700"><?php echo $estDriveTime; ?></p>
+                                </div>
+                                <div class="text-right">
+                                    <p class="text-[9px] font-black text-slate-400 uppercase mb-1">Scheduled Time</p>
+                                    <p class="text-sm font-extrabold text-slate-700"><?php echo date('H:i', strtotime($job['preferred_time'])); ?></p>
+                                </div>
+                            </div>
+
+                            <a href="<?php echo $chatUrl; ?>" class="w-full bg-slate-900 text-white py-4 rounded-2xl font-black text-xs tracking-[0.2em] uppercase hover:bg-indigo-600 transition active:scale-95 shadow-xl shadow-slate-100 flex items-center justify-center gap-2">
+                                Contact & Quote <i class="fas fa-chevron-right text-[10px]"></i>
                             </a>
                         </div>
-                    </div>
+                    <?php endforeach; ?>
                 </div>
-                <?php endforeach; ?>
-            </div>
+            <?php endif; ?>
         </div>
     </main>
 

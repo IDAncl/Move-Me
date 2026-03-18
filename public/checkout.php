@@ -4,6 +4,45 @@ require_once '../includes/Itaidbh.inc.php';
 
 $token = $_GET['token'] ?? '';
 $amount = $_GET['amount'] ?? '0';
+$status = $_GET['status'] ?? ''; // Get the payment status
+
+// --- NEW PAYMENT SUCCESS LOGIC ---
+if ($token && $status === 'paid') {
+    try {
+        $pdo->beginTransaction();
+
+        // 1. Get the session and driver details
+        $stmt = $pdo->prepare("SELECT chosen_driver_id FROM chat_sessions WHERE chat_token = ?");
+        $stmt->execute([$token]);
+        $session = $stmt->fetch();
+
+        if ($session && !empty($session['chosen_driver_id'])) {
+            $driverName = $session['chosen_driver_id'];
+
+            // 2. Get the final price from the last quote message
+            $priceStmt = $pdo->prepare("SELECT quote_price FROM chat_messages 
+                                        WHERE chat_token = ? AND sender_name = ? AND quote_price IS NOT NULL 
+                                        ORDER BY created_at DESC LIMIT 1");
+            $priceStmt->execute([$token, $driverName]);
+            $priceData = $priceStmt->fetch();
+            $finalPrice = $priceData ? $priceData['quote_price'] : '0';
+
+            // 3. Close the chat session
+            $closeStmt = $pdo->prepare("UPDATE chat_sessions SET is_active = 0 WHERE chat_token = ?");
+            $closeStmt->execute([$token]);
+
+            // 4. Insert the final system confirmation message
+            $systemMsg = "🤝 Payment Received! Booking Confirmed with $driverName for ₪$finalPrice. This chat is now closed.";
+            $msgStmt = $pdo->prepare("INSERT INTO chat_messages (chat_token, sender_name, message) VALUES (?, 'System', ?)");
+            $msgStmt->execute([$token, $systemMsg]);
+
+            $pdo->commit();
+        }
+    } catch (Exception $e) {
+        $pdo->rollBack();
+    }
+}
+// --- END PAYMENT SUCCESS LOGIC ---
 
 $stmt = $pdo->prepare("SELECT d.pickup_location, d.delivery_location, cs.chosen_driver_id 
                        FROM chat_sessions cs 
@@ -111,9 +150,8 @@ if (!$details) { die("Invalid transaction."); }
 
     <script>
     function processPayment(method) {
-        // Here you would add your actual payment SDK triggers
-        // For now, we redirect to success
-        window.location.href = `success.php?token=<?php echo $token; ?>&status=paid`;
+        // Redirect to self with status=paid to trigger the PHP logic added above
+        window.location.href = `success.php?token=<?php echo $token; ?>&amount=<?php echo $amount; ?>&status=paid`;
     }
     </script>
 </body>
