@@ -4,10 +4,8 @@ require_once '../includes/Itaidbh.inc.php';
 
 // Helper function for Google Maps Travel Time
 function getTravelTime($origin, $destination, $moveDate, $moveTime) {
-    $apiKey = 'YOUR_GOOGLE_MAPS_API_KEY'; // Replace with your actual key
-    
+    $apiKey = 'YOUR_GOOGLE_MAPS_API_KEY'; 
     $departureTimestamp = strtotime("$moveDate $moveTime");
-    
     $url = "https://maps.googleapis.com/maps/api/distancematrix/json?origins=" . urlencode($origin) . 
            "&destinations=" . urlencode($destination) . 
            "&departure_time=" . $departureTimestamp . 
@@ -16,18 +14,13 @@ function getTravelTime($origin, $destination, $moveDate, $moveTime) {
 
     $response = @file_get_contents($url);
     $data = json_decode($response, true);
-
-    if ($data && $data['status'] === 'OK') {
-        return $data['rows'][0]['elements'][0]['duration_in_traffic']['text'] ?? 'N/A';
-    }
-    return 'N/A';
+    return ($data && $data['status'] === 'OK') ? ($data['rows'][0]['elements'][0]['duration_in_traffic']['text'] ?? 'N/A') : 'N/A';
 }
 
 $driverName = $_SESSION['user_name'] ?? 'Driver';
-$profilePic = "https://i.pravatar.cc/150?u=" . strtolower($driverName); 
+$profilePic = "https://ui-avatars.com/api/?name=" . urlencode($driverName) . "&background=6366f1&color=fff&bold=true"; 
 
 try {
-    // JOIN with chat_sessions to get the active token for each delivery
     $sql = "SELECT d.*, cs.chat_token 
             FROM deliveries d 
             LEFT JOIN chat_sessions cs ON d.id = cs.delivery_id 
@@ -44,171 +37,145 @@ try {
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Driver Dashboard | MoveMe</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;800&display=swap" rel="stylesheet">
     <style>
-        body { background-color: #f8fafc; font-family: 'Inter', sans-serif; }
-        .sidebar { background: linear-gradient(180deg, #667eea 0%, #764ba2 100%); }
+        body { font-family: 'Plus Jakarta Sans', sans-serif; background-color: #f8fafc; }
+        .glass-sidebar { background: #1e293b; }
         .no-scrollbar::-webkit-scrollbar { display: none; }
+        .active-nav { background: rgba(255, 255, 255, 0.1); border-left: 4px solid #6366f1; }
     </style>
 </head>
-<body class="flex flex-col md:flex-row min-h-screen">
+<body class="min-h-screen text-slate-900">
 
-    <div class="md:hidden bg-white border-b px-4 py-3 flex justify-between items-center sticky top-0 z-50">
-        <div class="flex items-center gap-2 text-xl font-bold text-indigo-600">
-            <i class="fas fa-truck-moving"></i> MoveMe
+    <div class="md:hidden bg-white/80 backdrop-blur-md border-b px-6 py-4 flex justify-between items-center sticky top-0 z-50">
+        <div class="flex items-center gap-2 text-xl font-black text-indigo-600 tracking-tighter">
+            <i class="fas fa-truck-fast"></i> MoveMe
         </div>
-        <button id="menuBtn" class="text-gray-600 text-2xl">
-            <i class="fas fa-bars"></i>
+        <button id="menuBtn" class="w-10 h-10 flex items-center justify-center bg-slate-100 rounded-xl text-slate-600">
+            <i class="fas fa-bars-staggered"></i>
         </button>
     </div>
 
-    <aside id="sidebar" class="sidebar w-64 text-white flex flex-col p-6 fixed h-full z-40 transform -translate-x-full transition-transform duration-300 md:translate-x-0">
-        <div class="flex items-center gap-2 text-2xl font-bold mb-10 hidden md:flex">
-            <i class="fas fa-truck-moving"></i> MoveMe
+    <aside id="sidebar" class="glass-sidebar w-72 text-white flex flex-col fixed h-full z-40 transform -translate-x-full transition-all duration-300 md:translate-x-0 shadow-2xl">
+        <div class="p-8">
+            <div class="flex items-center gap-3 text-2xl font-black tracking-tighter mb-12">
+                <i class="fas fa-truck-fast text-indigo-400"></i> MoveMe
+            </div>
+            
+            <nav class="space-y-2">
+                <a href="#" class="active-nav flex items-center gap-4 p-4 rounded-2xl transition-all">
+                    <i class="fas fa-grid-2 w-5 text-indigo-400"></i> 
+                    <span class="font-bold text-sm">Dashboard</span>
+                </a>
+                <a href="my_routes.php" class="flex items-center gap-4 p-4 hover:bg-white/5 rounded-2xl transition-all group">
+                    <i class="fas fa-route w-5 text-slate-400 group-hover:text-white"></i> 
+                    <span class="font-bold text-sm text-slate-300 group-hover:text-white">My Routes</span>
+                </a>
+                <a href="#" class="flex items-center gap-4 p-4 hover:bg-white/5 rounded-2xl transition-all group">
+                    <i class="fas fa-envelope w-5 text-slate-400 group-hover:text-white"></i> 
+                    <span class="font-bold text-sm text-slate-300 group-hover:text-white">Messages</span>
+                </a>
+            </nav>
         </div>
-        <nav class="flex-grow space-y-4">
-            <a href="#" class="flex items-center gap-3 p-3 bg-white/20 rounded-lg"><i class="fas fa-th-large w-5"></i> Dashboard</a>
-            <a href="my_routes.php" class="flex items-center gap-3 p-3 hover:bg-white/10 rounded-lg transition">
-                <i class="fas fa-route w-5"></i> My Routes
+
+        <div class="mt-auto p-8">
+            <a href="logout.php" class="flex items-center gap-4 p-4 bg-red-500/10 text-red-400 rounded-2xl hover:bg-red-500 hover:text-white transition-all font-bold text-sm">
+                <i class="fas fa-power-off"></i> Logout
             </a>
-            <a href="#" class="flex items-center gap-3 p-3 hover:bg-white/10 rounded-lg transition"><i class="fas fa-comment-dots w-5"></i> Messages</a>
-        </nav>
-        <div class="pt-6 border-t border-white/20">
-            <a href="logout.php" class="flex items-center gap-3 p-3 hover:bg-red-500/40 rounded-lg transition"><i class="fas fa-sign-out-alt"></i> Logout</a>
         </div>
     </aside>
 
-    <div id="overlay" class="fixed inset-0 bg-black/50 z-30 hidden md:hidden"></div>
+    <div id="overlay" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-30 hidden md:hidden"></div>
 
-    <main class="flex-grow md:ml-64 p-4 md:p-8">
-        <header class="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-8">
+    <main class="md:ml-72 p-6 md:p-10">
+        
+        <div class="flex flex-col md:flex-row justify-between items-start md:items-center mb-10 gap-6">
             <div>
-                <h1 class="text-xl md:text-2xl font-bold text-gray-800">Welcome back, <?php echo htmlspecialchars($driverName); ?>!</h1>
-                <p class="text-gray-500 text-sm">Here’s what’s happening today.</p>
+                <h1 class="text-3xl font-black text-slate-900 tracking-tight">Hey, <?php echo htmlspecialchars($driverName); ?>! 👋</h1>
+                <p class="text-slate-500 font-medium">Ready to find your next route?</p>
             </div>
-            <div class="flex items-center gap-3 bg-white p-2 pr-4 rounded-full shadow-sm border self-end md:self-auto">
-                <img src="<?php echo $profilePic; ?>" class="w-8 h-8 rounded-full" alt="Profile">
-                <span class="text-sm font-medium text-gray-700"><?php echo htmlspecialchars($driverName); ?></span>
-            </div>
-        </header>
-
-        <div class="flex md:grid md:grid-cols-3 gap-4 mb-8 overflow-x-auto no-scrollbar pb-2">
-            <div class="bg-white p-5 rounded-2xl shadow-sm border-b-4 border-indigo-500 min-w-[250px] md:min-w-0">
-                <p class="text-gray-400 text-xs font-semibold uppercase">Total Earnings</p>
-                <h2 class="text-2xl font-bold text-gray-800 mt-1">$2,450.00</h2>
-            </div>
-            <div class="bg-white p-5 rounded-2xl shadow-sm border-b-4 border-purple-500 min-w-[250px] md:min-w-0">
-                <p class="text-gray-400 text-xs font-semibold uppercase">Open Requests</p>
-                <h2 class="text-2xl font-bold text-gray-800 mt-1"><?php echo count($deliveries); ?></h2>
-            </div>
-            <div class="bg-white p-5 rounded-2xl shadow-sm border-b-4 border-pink-500 min-w-[250px] md:min-w-0">
-                <p class="text-gray-400 text-xs font-semibold uppercase">Rating</p>
-                <h2 class="text-2xl font-bold text-gray-800 mt-1">4.9 <span class="text-yellow-400"><i class="fas fa-star text-sm"></i></span></h2>
+            <div class="flex items-center gap-4 bg-white p-2 pr-6 rounded-3xl shadow-sm border border-slate-100">
+                <img src="<?php echo $profilePic; ?>" class="w-10 h-10 rounded-2xl shadow-inner" alt="Profile">
+                <div>
+                    <p class="text-[10px] font-black uppercase text-slate-400 leading-none">Verified Driver</p>
+                    <p class="text-sm font-bold text-slate-800"><?php echo htmlspecialchars($driverName); ?></p>
+                </div>
             </div>
         </div>
 
-        <div class="bg-white rounded-2xl shadow-sm border">
-            <div class="p-6 border-b flex justify-between items-center">
-                <h3 class="font-bold text-gray-800">Available Jobs</h3>
-                <span class="bg-indigo-100 text-indigo-700 text-[10px] font-bold px-2 py-1 rounded">NEAR YOU</span>
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-12">
+            <div class="bg-white p-6 rounded-[2rem] shadow-sm border border-slate-100 relative overflow-hidden group">
+                <div class="absolute top-0 right-0 p-4 opacity-10 group-hover:scale-110 transition-transform">
+                    <i class="fas fa-wallet text-6xl text-indigo-600"></i>
+                </div>
+                <p class="text-slate-400 text-xs font-black uppercase tracking-widest">Earnings</p>
+                <h2 class="text-3xl font-black text-slate-900 mt-2">₪2,450</h2>
+            </div>
+            
+            <div class="bg-indigo-600 p-6 rounded-[2rem] shadow-xl shadow-indigo-100 text-white relative overflow-hidden">
+                <p class="text-indigo-200 text-xs font-black uppercase tracking-widest">Open Jobs</p>
+                <h2 class="text-3xl font-black mt-2"><?php echo count($deliveries); ?></h2>
             </div>
 
-            <div class="hidden md:block overflow-x-auto">
-                <table class="w-full text-left">
-                    <thead class="bg-gray-50 text-gray-400 text-[10px] uppercase font-bold">
-                        <tr>
-                            <th class="px-6 py-4">Route & Est. Time</th>
-                            <th class="px-6 py-4">Item</th>
-                            <th class="px-6 py-4">Schedule</th>
-                            <th class="px-6 py-4">Action</th>
-                        </tr>
-                    </thead>
-                    <tbody class="divide-y text-sm">
-                        <?php foreach ($deliveries as $row): ?>
-                        <tr class="hover:bg-gray-50 transition">
-                            <td class="px-6 py-4">
-                                <div class="flex flex-col">
-                                    <div class="flex items-center gap-2">
-                                        <span class="text-gray-900 font-medium"><?php echo htmlspecialchars($row['pickup_location']); ?></span>
-                                        <i class="fas fa-long-arrow-alt-right text-indigo-400"></i>
-                                        <span class="text-gray-900 font-medium"><?php echo htmlspecialchars($row['delivery_location']); ?></span>
-                                    </div>
-                                    <div class="flex items-center gap-3 mt-1">
-                                        <span class="text-[11px] text-orange-600 font-bold flex items-center gap-1">
-                                            <i class="fas fa-clock"></i> Est. Drive: 
-                                            <?php echo getTravelTime($row['pickup_location'], $row['delivery_location'], $row['moving_date'], $row['preferred_time']); ?>
-                                        </span>
-                                        <a href="https://waze.com/ul?q=<?php echo urlencode($row['delivery_location']); ?>&navigate=yes" target="_blank" class="text-[11px] text-blue-500 hover:text-blue-700 underline flex items-center gap-1">
-                                            <i class="fab fa-waze"></i> Open Waze
-                                        </a>
-                                    </div>
-                                </div>
-                            </td>
-                            <td class="px-6 py-4 text-gray-500"><?php echo htmlspecialchars($row['object_type']); ?></td>
-                            <td class="px-6 py-4 text-xs">
-                                <div class="font-bold text-gray-700"><?php echo date('M d', strtotime($row['moving_date'])); ?></div>
-                                <div class="text-gray-400"><?php echo date('H:i', strtotime($row['preferred_time'])); ?></div>
-                            </td>
-                            <td class="px-6 py-4">
-                                <a href="chat.php?token=<?php echo $row['chat_token']; ?>" class="inline-block bg-indigo-600 text-white px-4 py-2 rounded-lg font-bold hover:bg-indigo-700 transition shadow-sm text-xs text-center">
-                                    Contact & Quote
-                                </a>
-                            </td>
-                        </tr>
-                        <?php endforeach; ?>
-                    </tbody>
-                </table>
+            <div class="bg-white p-6 rounded-[2rem] shadow-sm border border-slate-100">
+                <p class="text-slate-400 text-xs font-black uppercase tracking-widest">Driver Rating</p>
+                <div class="flex items-center gap-2 mt-2">
+                    <h2 class="text-3xl font-black text-slate-900">4.9</h2>
+                    <div class="flex text-amber-400 text-xs gap-0.5">
+                        <i class="fas fa-star"></i><i class="fas fa-star"></i><i class="fas fa-star"></i><i class="fas fa-star"></i><i class="fas fa-star"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="space-y-6">
+            <div class="flex items-center justify-between px-2">
+                <h3 class="text-xl font-extrabold text-slate-900">Available Jobs</h3>
+                <div class="flex gap-2">
+                    <span class="bg-emerald-100 text-emerald-700 text-[10px] font-black px-3 py-1.5 rounded-full uppercase tracking-tighter">Live Updates</span>
+                </div>
             </div>
 
-            <div class="md:hidden divide-y divide-gray-100">
+            <div class="grid grid-cols-1 gap-4">
                 <?php foreach ($deliveries as $row): ?>
-                <div class="p-5 space-y-4 bg-white hover:bg-gray-50 transition">
-                    <div class="flex justify-between items-start">
-                        <span class="text-[10px] font-bold text-indigo-600 uppercase bg-indigo-50 px-2 py-1 rounded-md tracking-wider">
-                            <?php echo htmlspecialchars($row['object_type'] ?? 'Delivery'); ?>
-                        </span>
-                        <div class="text-right">
-                            <span class="block text-xs font-bold text-gray-700"><?php echo date('M d', strtotime($row['moving_date'])); ?></span>
-                            <span class="block text-[10px] text-gray-400"><?php echo date('H:i', strtotime($row['preferred_time'])); ?></span>
-                        </div>
-                    </div>
-                    
-                    <div class="space-y-2 relative">
-                        <div class="flex items-start gap-3">
-                            <div class="mt-1 flex flex-col items-center">
-                                <i class="fas fa-circle text-[8px] text-green-500"></i>
-                                <div class="w-0.5 h-6 bg-gray-200 my-1"></div>
+                <div class="bg-white p-6 rounded-[2.5rem] shadow-sm border border-slate-50 hover:shadow-xl hover:shadow-slate-200/50 transition-all group">
+                    <div class="flex flex-col md:flex-row md:items-center justify-between gap-6">
+                        
+                        <div class="flex-grow space-y-4">
+                            <div class="flex items-center gap-2">
+                                <span class="text-[10px] font-black bg-slate-100 text-slate-500 px-3 py-1 rounded-lg uppercase"><?php echo htmlspecialchars($row['object_type'] ?? 'General'); ?></span>
+                                <span class="text-[10px] font-black bg-amber-50 text-amber-600 px-3 py-1 rounded-lg uppercase">
+                                    <i class="fas fa-calendar-day mr-1"></i><?php echo date('M d', strtotime($row['moving_date'])); ?>
+                                </span>
                             </div>
-                            <span class="text-sm font-medium text-gray-800"><?php echo htmlspecialchars($row['pickup_location']); ?></span>
-                        </div>
-                        <div class="flex items-start gap-3">
-                            <i class="fas fa-map-marker-alt text-sm text-indigo-500 mt-1"></i>
-                            <span class="text-sm font-medium text-gray-800"><?php echo htmlspecialchars($row['delivery_location']); ?></span>
-                        </div>
-                    </div>
 
-                    <div class="flex flex-wrap gap-2 pt-1">
-                        <div class="flex items-center gap-2 text-[11px] text-orange-600 bg-orange-50 border border-orange-100 px-3 py-1.5 rounded-xl font-bold">
-                            <i class="fas fa-clock"></i>
-                            <span>Est. Trip: <?php echo getTravelTime($row['pickup_location'], $row['delivery_location'], $row['moving_date'], $row['preferred_time']); ?></span>
+                            <div class="flex flex-col gap-1">
+                                <div class="flex items-center gap-3">
+                                    <div class="w-2 h-2 rounded-full bg-indigo-500"></div>
+                                    <span class="font-extrabold text-slate-800 text-lg"><?php echo htmlspecialchars($row['pickup_location']); ?></span>
+                                </div>
+                                <div class="w-0.5 h-4 border-l-2 border-dashed border-slate-200 ml-1"></div>
+                                <div class="flex items-center gap-3">
+                                    <div class="w-2 h-2 rounded-full bg-emerald-500"></div>
+                                    <span class="font-extrabold text-slate-800 text-lg"><?php echo htmlspecialchars($row['delivery_location']); ?></span>
+                                </div>
+                            </div>
                         </div>
-                        <a href="https://waze.com/ul?q=<?php echo urlencode($row['delivery_location']); ?>&navigate=yes" target="_blank" class="flex items-center gap-2 text-[11px] text-blue-600 bg-blue-50 border border-blue-100 px-3 py-1.5 rounded-xl font-bold">
-                            <i class="fab fa-waze"></i>
-                            <span>Open Waze</span>
-                        </a>
-                    </div>
 
-                    <div class="flex justify-between items-center pt-2">
-                        <div class="flex flex-col">
-                            <span class="text-[9px] text-gray-400 uppercase font-bold tracking-tighter">Customer</span>
-                            <span class="text-xs font-bold text-gray-700"><?php echo htmlspecialchars($row['full_name']); ?></span>
+                        <div class="flex flex-col sm:flex-row md:flex-col gap-3 min-w-[180px]">
+                            <div class="text-center md:text-right px-4">
+                                <p class="text-[10px] font-black text-slate-400 uppercase tracking-widest">Est. Drive Time</p>
+                                <p class="text-sm font-black text-slate-900"><?php echo getTravelTime($row['pickup_location'], $row['delivery_location'], $row['moving_date'], $row['preferred_time']); ?></p>
+                            </div>
+                            
+                            <a href="chat.php?token=<?php echo $row['chat_token']; ?>" class="flex items-center justify-center gap-2 bg-slate-900 text-white py-4 px-6 rounded-2xl font-black text-xs hover:bg-indigo-600 transition-all shadow-lg active:scale-95">
+                                CONTACT & QUOTE <i class="fas fa-chevron-right text-[10px] opacity-50"></i>
+                            </a>
                         </div>
-                        <a href="chat.php?token=<?php echo $row['chat_token']; ?>" class="bg-indigo-600 text-white px-6 py-2.5 rounded-xl text-xs font-bold shadow-md active:scale-95 transition-transform">
-                            Contact & Quote
-                        </a>
                     </div>
                 </div>
                 <?php endforeach; ?>
