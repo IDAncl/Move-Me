@@ -2,23 +2,39 @@
 session_start();
 require_once '../includes/Itaidbh.inc.php';
 
+// 1. Get Token and Session Data
 $token = $_GET['token'] ?? '';
-$userName = $_SESSION['user_name'] ?? 'guest';
-$userRole = $_SESSION['user_role'] ?? 'driver';
+$userName = $_SESSION['user_name'] ?? 'Guest';
 
-// 1. Verify session and get delivery details
-$stmt = $pdo->prepare("SELECT d.pickup_location, d.delivery_location, cs.is_active, cs.chosen_driver_id 
-                       FROM chat_sessions cs 
-                       JOIN deliveries d ON cs.delivery_id = d.id 
-                       WHERE cs.chat_token = ?");
+// Fix: Check both possible session keys for the role
+$isDriverFlag = (isset($_SESSION['is_driver']) && $_SESSION['is_driver'] == 1);
+$userRole = $isDriverFlag ? 'driver' : 'customer';
+
+// 2. Database Verification with detailed error handling
+if (empty($token)) {
+    die("Error: No chat token provided in the URL.");
+}
+
+$stmt = $pdo->prepare("
+    SELECT d.pickup_location, d.delivery_location, cs.is_active, cs.chosen_driver_id 
+    FROM chat_sessions cs 
+    JOIN deliveries d ON cs.delivery_id = d.id 
+    WHERE cs.chat_token = ?
+");
 $stmt->execute([$token]);
 $session = $stmt->fetch();
 
-// 2. Redirect ONLY if the session is explicitly closed
 if (!$session) {
-    die("Error: This chat link is no longer valid.");
+    // Debug: Check if the token exists but the delivery is missing
+    $check = $pdo->prepare("SELECT id FROM chat_sessions WHERE chat_token = ?");
+    $check->execute([$token]);
+    if ($check->fetch()) {
+        die("Error: Chat exists, but the linked delivery record was not found.");
+    }
+    die("Error: This chat link is no longer valid or does not exist in our system.");
 }
 
+// 3. Handle closed sessions
 if ((int)$session['is_active'] === 0 && !empty($session['chosen_driver_id'])) {
     echo "<script>alert('This job has been assigned. The chat is now closed.'); window.location.href='index.php';</script>";
     exit;
@@ -87,68 +103,44 @@ if ((int)$session['is_active'] === 0 && !empty($session['chosen_driver_id'])) {
                 const messages = await res.json();
                 
                 chatBox.innerHTML = messages.map(msg => {
-                    // 1. Check for System Messages (The "Booking Confirmed" notification)
                     if (msg.sender_name === 'System') {
-                        return `
-                            <div class="flex justify-center my-6">
-                                <div class="bg-indigo-50 border border-indigo-100 text-indigo-700 px-6 py-2 rounded-full text-[11px] font-black uppercase tracking-wider shadow-sm flex items-center gap-2">
-                                    <i class="fas fa-check-circle"></i>
-                                    ${msg.message}
-                                </div>
-                            </div>
-                        `;
+                        return `<div class="flex justify-center my-6">
+                                    <div class="bg-indigo-50 border border-indigo-100 text-indigo-700 px-6 py-2 rounded-full text-[11px] font-black uppercase tracking-wider shadow-sm flex items-center gap-2">
+                                        <i class="fas fa-check-circle"></i> ${msg.message}
+                                    </div>
+                                </div>`;
                     }
 
                     const isMe = msg.sender_name === currentUserName;
-                    
-                    // 2. Quote UI Logic
                     let quoteHtml = '';
                     if (msg.quote_price) {
-                        quoteHtml = `
-                            <div class="mt-3 overflow-hidden rounded-xl border border-emerald-100 bg-white shadow-sm">
-                                <div class="bg-emerald-50 px-3 py-1.5 text-[10px] font-bold uppercase text-emerald-700">Driver Offer</div>
-                                <div class="p-3 text-center">
-                                    <div class="text-xl font-black text-gray-900">₪${msg.quote_price}</div>
-                                    ${userRole === 'customer' ? `
-                                        <button onclick="acceptOffer('${msg.sender_name}')" 
-                                                class="mt-2 w-full rounded-lg bg-emerald-600 py-2 text-xs font-bold text-white hover:bg-emerald-700 active:scale-95 transition">
-                                            Accept This Driver
-                                        </button>
-                                    ` : '<p class="text-[10px] text-gray-400 mt-1 uppercase font-bold tracking-tighter">Awaiting customer...</p>'}
-                                </div>
-                            </div>`;
+                        quoteHtml = `<div class="mt-3 overflow-hidden rounded-xl border border-emerald-100 bg-white shadow-sm">
+                                        <div class="bg-emerald-50 px-3 py-1.5 text-[10px] font-bold uppercase text-emerald-700">Driver Offer</div>
+                                        <div class="p-3 text-center">
+                                            <div class="text-xl font-black text-gray-900">₪${msg.quote_price}</div>
+                                            ${userRole === 'customer' ? `<button onclick="acceptOffer('${msg.sender_name}', ${msg.quote_price})" class="mt-2 w-full rounded-lg bg-emerald-600 py-2 text-xs font-bold text-white hover:bg-emerald-700 active:scale-95 transition">Accept This Driver</button>` : '<p class="text-[10px] text-gray-400 mt-1 uppercase font-bold tracking-tighter">Awaiting customer...</p>'}
+                                        </div>
+                                    </div>`;
                     }
 
-                    // 3. Text Bubble Logic (Hides empty boxes)
                     const text = msg.message ? msg.message.trim() : '';
-                    const bubble = text !== '' ? `
-                        <div class="max-w-[85%] px-4 py-2.5 shadow-sm text-sm leading-relaxed
-                            ${isMe ? 'bg-indigo-600 text-white rounded-2xl rounded-tr-none' : 'bg-white text-gray-800 rounded-2xl rounded-tl-none border border-gray-200'}">
-                            ${msg.message}
-                        </div>` : '';
+                    const bubble = text !== '' ? `<div class="max-w-[85%] px-4 py-2.5 shadow-sm text-sm leading-relaxed ${isMe ? 'bg-indigo-600 text-white rounded-2xl rounded-tr-none' : 'bg-white text-gray-800 rounded-2xl rounded-tl-none border border-gray-200'}">${msg.message}</div>` : '';
 
-                    return `
-                        <div class="flex flex-col mb-4 ${isMe ? 'items-end' : 'items-start'}">
-                            <span class="text-[10px] text-gray-400 mb-1 px-2 font-bold uppercase tracking-tighter">
-                                ${isMe ? 'You' : msg.sender_name}
-                            </span>
-                            ${bubble}
-                            <div class="w-48">${quoteHtml}</div>
-                        </div>
-                    `;
+                    return `<div class="flex flex-col mb-4 ${isMe ? 'items-end' : 'items-start'}">
+                                <span class="text-[10px] text-gray-400 mb-1 px-2 font-bold uppercase tracking-tighter">${isMe ? 'You' : msg.sender_name}</span>
+                                ${bubble}
+                                <div class="w-48">${quoteHtml}</div>
+                            </div>`;
                 }).join('');
                 
                 chatBox.scrollTop = chatBox.scrollHeight;
-            } catch (e) { 
-                console.error("Error refreshing chat:", e); 
-            }
+            } catch (e) { console.error("Error refreshing chat:", e); }
         }
 
         chatForm.onsubmit = async (e) => {
             e.preventDefault();
             const messageInput = document.getElementById('message');
             const quoteInput = document.getElementById('quote_price');
-            
             const messageValue = messageInput.value.trim();
             const quoteValue = quoteInput ? quoteInput.value.trim() : '';
 
@@ -170,22 +162,16 @@ if ((int)$session['is_active'] === 0 && !empty($session['chosen_driver_id'])) {
             }
         };
 
-        async function acceptOffer(driverName) {
-            if (!confirm(`Hire ${driverName}? This closes the bidding.`)) return;
-            
+        async function acceptOffer(driverName, price) {
+            if (!confirm(`Hire ${driverName} for ₪${price}? This closes the bidding.`)) return;
             const formData = new FormData();
             formData.append('token', token);
             formData.append('driver_name', driverName);
 
             const res = await fetch('accept_offer.php', { method: 'POST', body: formData });
             const data = await res.json();
-            
             if (data.status === 'success') {
-                // GET THE PRICE: You can grab the price from the UI or have the API return it
-                const amount = document.querySelector('.text-xl.font-black').innerText.replace('₪', '');
-                
-                // REDIRECT TO CHECKOUT
-                window.location.href = `checkout.php?token=${token}&amount=${5}`;
+                window.location.href = `checkout.php?token=${token}&amount=${price}`;
             }
         }
 

@@ -1,6 +1,19 @@
 <?php
-session_start();
+
 require_once '../includes/Itaidbh.inc.php'; 
+
+// Set session to last for 30 days
+$timeout = 60 * 60 * 24 * 30; 
+ini_set('session.gc_maxlifetime', $timeout);
+session_set_cookie_params($timeout);
+
+session_start();
+
+if (!isset($_SESSION['user_id']) || $_SESSION['is_driver'] != 1) {
+    header("Location: driver_auth.php");
+    exit();
+}
+
 
 // Helper function for Google Maps Travel Time
 function getTravelTime($origin, $destination, $moveDate, $moveTime) {
@@ -158,11 +171,9 @@ try {
                     <label class="text-[10px] font-black uppercase text-slate-400 mb-2 block ml-1">Region</label>
                     <select name="region" class="w-full bg-slate-50 border-none rounded-2xl p-4 text-sm font-bold focus:ring-2 focus:ring-indigo-500 appearance-none transition-all">
                         <option value="">All Regions</option>
-                        <option value="North" <?php echo ($_GET['region'] ?? '') == 'North' ? 'selected' : ''; ?>>North</option>
-                        <option value="South" <?php echo ($_GET['region'] ?? '') == 'South' ? 'selected' : ''; ?>>South</option>
-                        <option value="East" <?php echo ($_GET['region'] ?? '') == 'East' ? 'selected' : ''; ?>>East</option>
-                        <option value="West" <?php echo ($_GET['region'] ?? '') == 'West' ? 'selected' : ''; ?>>West</option>
-                        <option value="Center" <?php echo ($_GET['region'] ?? '') == 'Center' ? 'selected' : ''; ?>>Center</option>
+                        <option value="North" <?php echo ($_GET['region'] ?? '') == 'North' ? 'selected' : ''; ?>>צפון</option>
+                        <option value="Center" <?php echo ($_GET['region'] ?? '') == 'Center' ? 'selected' : ''; ?>>מרכז</option>
+                        <option value="South" <?php echo ($_GET['region'] ?? '') == 'South' ? 'selected' : ''; ?>>דרום</option>
                     </select>
                 </div>
                 <button type="submit" class="bg-indigo-600 text-white font-black text-xs uppercase tracking-widest py-4 px-6 rounded-2xl hover:bg-slate-900 transition-all shadow-xl shadow-indigo-100 active:scale-95">
@@ -172,13 +183,6 @@ try {
         </div>
 
         <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-12">
-            <div class="bg-white p-6 rounded-[2rem] shadow-sm border border-slate-100 relative overflow-hidden group">
-                <div class="absolute top-0 right-0 p-4 opacity-10 group-hover:scale-110 transition-transform">
-                    <i class="fas fa-wallet text-6xl text-indigo-600"></i>
-                </div>
-                <p class="text-slate-400 text-xs font-black uppercase tracking-widest">Earnings</p>
-                <h2 class="text-3xl font-black text-slate-900 mt-2">₪2,450</h2>
-            </div>
             
             <div class="bg-indigo-600 p-6 rounded-[2rem] shadow-xl shadow-indigo-100 text-white relative overflow-hidden">
                 <p class="text-indigo-200 text-xs font-black uppercase tracking-widest">Jobs Found</p>

@@ -15,9 +15,10 @@
     <title>MoveMe - Booking</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/lucide@latest"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
     <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
     <style>
-        body { font-family: 'Plus Jakarta Sans', sans-serif; background-color: #f8fafc; }
+        body { font-family: 'Plus Jakarta Sans', sans-serif; background-color: #f8fafc; overflow-x: hidden; }
         .gradient-bg { background: linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%); }
         .glass-effect { background: rgba(255, 255, 255, 0.98); backdrop-filter: blur(20px); }
         
@@ -37,6 +38,29 @@
 </head>
 <body class="min-h-screen">
 
+    <div id="mobileOverlay" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[60] hidden transition-opacity duration-300 opacity-0"></div>
+
+    <div id="mobileMenu" class="fixed top-0 right-0 w-[280px] h-full bg-white z-[70] translate-x-full transition-transform duration-300 p-8 shadow-2xl">
+        <div class="flex justify-between items-center mb-10">
+            <div class="flex items-center gap-2 text-xl font-black text-indigo-600 tracking-tighter">
+                <i class="fas fa-truck-fast"></i> MoveMe
+            </div>
+            <button id="closeMenu" class="text-slate-400 hover:text-slate-600">
+                <i data-lucide="x" class="w-6 h-6"></i>
+            </button>
+        </div>
+
+        <nav class="space-y-6">
+            <a href="driver_auth.php" class="flex items-center gap-4 p-4 bg-indigo-50 text-indigo-600 rounded-2xl font-extrabold text-sm transition-all active:scale-95">
+                <i class="fas fa-id-card"></i> 
+                Sign in as Driver
+            </a>
+            <hr class="border-slate-100">
+             <!--<a href="#" class="block font-bold text-slate-600 hover:text-indigo-600">How it Works</a>
+            <a href="ItaiForDrivers.php" class="block font-bold text-slate-600 hover:text-indigo-600">For Drivers</a> -->
+        </nav>
+    </div>
+
     <header class="bg-white/80 backdrop-blur-md sticky top-0 z-50 border-b border-slate-100">
         <div class="max-w-7xl mx-auto px-6 h-16 flex justify-between items-center">
             <div class="flex items-center gap-2">
@@ -45,12 +69,17 @@
                 </div>
                 <span class="text-xl font-extrabold tracking-tighter text-slate-900">MoveMe</span>
             </div>
-            <div class="md:hidden bg-slate-100 p-2 rounded-xl">
-                <i data-lucide="menu" class="w-5 h-5 text-slate-600"></i>
-            </div>
+            
+            <button id="menuBtn" class="md:hidden bg-slate-100 p-2 rounded-xl text-slate-600 hover:bg-slate-200 transition-colors">
+                <i data-lucide="menu" class="w-5 h-5"></i>
+            </button>
+
             <nav class="hidden md:flex space-x-8 text-sm font-bold text-slate-500">
-                <a href="#" class="hover:text-indigo-600 transition">How it Works</a>
-                <a href="ItaiForDrivers.php" class="hover:text-indigo-600 transition">For Drivers</a>
+                <!-- <a href="#" class="hover:text-indigo-600 transition">How it Works</a>
+                <a href="ItaiForDrivers.php" class="hover:text-indigo-600 transition">For Drivers</a> -->
+                <a href="ItaiRegisteredDriver.php" class="bg-slate-900 text-white px-5 py-2 rounded-full hover:bg-indigo-600 transition shadow-lg shadow-slate-100">
+                    Driver Portal
+                </a>
             </nav>
         </div>
     </header>
@@ -158,8 +187,40 @@
 
     <script>
         lucide.createIcons();
+
+        // Prevent past dates
         const today = new Date().toISOString().split('T')[0];
         document.getElementById('moveDate').setAttribute('min', today);
+
+        // Mobile Menu Controls
+        const menuBtn = document.getElementById('menuBtn');
+        const closeMenu = document.getElementById('closeMenu');
+        const mobileMenu = document.getElementById('mobileMenu');
+        const mobileOverlay = document.getElementById('mobileOverlay');
+
+        function toggleMenu() {
+            const isHidden = mobileMenu.classList.contains('translate-x-full');
+            
+            if (isHidden) {
+                mobileOverlay.classList.remove('hidden');
+                setTimeout(() => {
+                    mobileOverlay.classList.add('opacity-100');
+                    mobileMenu.classList.remove('translate-x-full');
+                    document.body.style.overflow = 'hidden'; // Prevent scroll
+                }, 10);
+            } else {
+                mobileMenu.classList.add('translate-x-full');
+                mobileOverlay.classList.remove('opacity-100');
+                document.body.style.overflow = ''; // Enable scroll
+                setTimeout(() => {
+                    mobileOverlay.classList.add('hidden');
+                }, 300);
+            }
+        }
+
+        menuBtn.addEventListener('click', toggleMenu);
+        closeMenu.addEventListener('click', toggleMenu);
+        mobileOverlay.addEventListener('click', toggleMenu);
     </script>
 </body>
 </html>
