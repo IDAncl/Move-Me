@@ -3,166 +3,185 @@ session_start();
 require_once '../includes/Itaidbh.inc.php';
 
 $token = $_GET['token'] ?? '';
-$amount = $_GET['amount'] ?? '0';
 $status = $_GET['status'] ?? ''; 
-$userRole = $_SESSION['user_role'] ?? 'guest';
 
-// --- DATABASE UPDATE LOGIC (CLOSING THE CHAT) ---
+$isDriverFlag = (isset($_SESSION['is_driver']) && $_SESSION['is_driver'] == 1);
+$userRole = $isDriverFlag ? 'driver' : 'customer';
+
+// --- שליפת נתונים מהדאטה-בייס ---
+$stmt = $pdo->prepare("
+    SELECT 
+        d.full_name AS customer_name, 
+        d.phone_number AS customer_phone, 
+        d.pickup_location, 
+        d.delivery_location,
+        d.moving_date,
+        d.preferred_time,
+        cs.chosen_driver_id AS session_driver_name,
+        u.full_name AS user_table_name,
+        u.phone AS driver_phone,
+        (SELECT quote_price FROM chat_messages 
+         WHERE chat_token = ? AND quote_price > 0 
+         ORDER BY id DESC LIMIT 1) as final_price
+    FROM chat_sessions cs 
+    JOIN deliveries d ON cs.delivery_id = d.id 
+    LEFT JOIN users u ON cs.chosen_driver_id = u.full_name  
+    WHERE cs.chat_token = ?
+");
+$stmt->execute([$token, $token]);
+$data = $stmt->fetch();
+
+if (!$data) { die("ההזמנה לא נמצאה."); }
+
+$displayPrice = $data['final_price'] ?? '0';
+
+// עיצוב תאריך ושעה לעברית
+$formattedDate = date("d/m/Y", strtotime($data['moving_date']));
+$formattedTime = date("H:i", strtotime($data['preferred_time']));
+
+// --- לוגיקת עדכון סטטוס (סגירת הצ'אט) ---
 if (!empty($token) && $status === 'paid') {
     try {
         $pdo->beginTransaction();
+        $checkStmt = $pdo->prepare("SELECT is_active FROM chat_sessions WHERE chat_token = ?");
+        $checkStmt->execute([$token]);
+        $session = $checkStmt->fetch();
 
-        // 1. Get the session details to verify it's still active and get the driver
-        $stmt = $pdo->prepare("SELECT chosen_driver_id, is_active FROM chat_sessions WHERE chat_token = ?");
-        $stmt->execute([$token]);
-        $session = $stmt->fetch();
-
-        // Only proceed if the session exists and is currently active (is_active = 1)
         if ($session && $session['is_active'] == 1) {
-            $driverName = $session['chosen_driver_id'];
+            $update = $pdo->prepare("UPDATE chat_sessions SET is_active = 0 WHERE chat_token = ?");
+            $update->execute([$token]);
 
-            // 2. Get the final price from the last quote message sent by that driver
-            $priceStmt = $pdo->prepare("SELECT quote_price FROM chat_messages 
-                                        WHERE chat_token = ? AND sender_name = ? AND quote_price IS NOT NULL 
-                                        ORDER BY created_at DESC LIMIT 1");
-            $priceStmt->execute([$token, $driverName]);
-            $priceData = $priceStmt->fetch();
-            
-            // Fallback: If no quote found in DB, use the amount from the URL
-            $finalPrice = ($priceData && $priceData['quote_price'] > 0) ? $priceData['quote_price'] : $amount;
-
-            // 3. Close the chat session
-            $closeStmt = $pdo->prepare("UPDATE chat_sessions SET is_active = 0 WHERE chat_token = ?");
-            $closeStmt->execute([$token]);
-
-            // 4. Insert the final system confirmation message
-            $systemMsg = "🤝 Payment Received! Booking Confirmed with $driverName for ₪$finalPrice. This chat is now closed.";
+            $systemMsg = "🤝 ההזמנה אושרה בסכום של ₪$displayPrice. מועד ההובלה: $formattedDate בשעה $formattedTime.";
             $msgStmt = $pdo->prepare("INSERT INTO chat_messages (chat_token, sender_name, message) VALUES (?, 'System', ?)");
             $msgStmt->execute([$token, $systemMsg]);
-
             $pdo->commit();
         } else {
-            // If session is already 0, we just roll back and show the page (already processed)
-            $pdo->rollBack();
+            if ($pdo->inTransaction()) $pdo->rollBack();
         }
     } catch (Exception $e) {
-        $pdo->rollBack();
-        // error_log($e->getMessage()); // Optional: for debugging
+        if ($pdo->inTransaction()) $pdo->rollBack();
     }
 }
-// --- END DATABASE UPDATE LOGIC ---
 
-// Fetch the full delivery and session data for the UI
-$stmt = $pdo->prepare("
-    SELECT d.*, cs.chosen_driver_id 
-    FROM chat_sessions cs 
-    JOIN deliveries d ON cs.delivery_id = d.id 
-    WHERE cs.chat_token = ?
-");
-$stmt->execute([$token]);
-$data = $stmt->fetch();
-
-// Temporary debug for previewing
-if (!$data && $token === 'test') {
-    $data = [
-        'full_name' => 'Client Name',
-        'chosen_driver_id' => 'Driver Name',
-        'phone' => '050-123-4567',
-        'pickup_location' => 'Tel Aviv',
-        'delivery_location' => 'Haifa'
-    ];
+// הגדרת פרטי השותף להובלה
+$wazePickup = "https://waze.com/ul?q=" . urlencode($data['pickup_location']);
+if ($userRole === 'customer') {
+    $partnerHeader = "הנהג שלך";
+    $partnerName = !empty($data['user_table_name']) ? $data['user_table_name'] : $data['session_driver_name'];
+    $partnerPhone = $data['driver_phone'] ?? 'צור קשר עם התמיכה';
+} else {
+    $partnerHeader = "פרטי הלקוח";
+    $partnerName = $data['customer_name'];
+    $partnerPhone = $data['customer_phone'];
 }
-
-if (!$data) { die("Access Denied."); }
-
-$isCustomer = ($userRole === 'customer');
-$partnerHeader = $isCustomer ? "Your Driver" : "Client Details";
-$partnerName = $isCustomer ? $data['chosen_driver_id'] : $data['full_name'];
-$partnerPhone = $data['phone'] ?? '050-000-0000'; 
 ?>
 
 <!DOCTYPE html>
-<html lang="en">
+<html lang="he" dir="rtl">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Booking Confirmed - MoveMe</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>סיכום הזמנה | MoveMe</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
-    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;800&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Assistant:wght@300;400;600;700;800&display=swap" rel="stylesheet">
     <style>
-        body { font-family: 'Plus Jakarta Sans', sans-serif; }
-        .success-bg { background: radial-gradient(circle at top, #ecfdf5 0%, #f8fafc 100%); }
+        body { font-family: 'Assistant', sans-serif; background-color: #f8fafc; }
+        .glass-card { background: rgba(255, 255, 255, 0.9); backdrop-filter: blur(8px); }
     </style>
 </head>
-<body class="success-bg min-h-screen flex items-center justify-center p-6">
+<body class="min-h-screen flex flex-col items-center">
 
-    <div class="max-w-md w-full">
-        <div class="text-center mb-8">
-            <div class="bg-emerald-500 w-20 h-20 rounded-[2.5rem] flex items-center justify-center mx-auto mb-4 shadow-xl shadow-emerald-200">
-                <i class="fas fa-check text-white text-3xl"></i>
-            </div>
-            <h1 class="text-3xl font-black text-slate-900 tracking-tight">All Set!</h1>
-            <p class="text-slate-500 font-medium mt-1">Payment confirmed & move booked.</p>
+    <div class="w-full max-w-md bg-slate-900 p-4 text-white flex items-center justify-between shadow-lg">
+        <span class="text-[10px] font-black uppercase tracking-widest">סיכום הובלה</span>
+        <div class="flex items-center gap-2">
+            <span class="text-[10px] font-bold"><?php echo ($status === 'paid') ? 'שולם ומאובטח' : 'ממתין לתשלום'; ?></span>
+            <div class="w-2 h-2 rounded-full <?php echo ($status === 'paid') ? 'bg-emerald-400' : 'bg-orange-400'; ?> animate-pulse"></div>
         </div>
-
-        <div class="bg-white rounded-[2.5rem] shadow-[0_20px_50px_rgba(0,0,0,0.04)] border border-slate-50 overflow-hidden">
-            
-            <div class="p-8 pb-0">
-                <h2 class="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mb-4"><?php echo $partnerHeader; ?></h2>
-                
-                <div class="flex items-center gap-4 bg-slate-50 p-5 rounded-[2rem] border border-slate-100">
-                    <div class="w-14 h-14 bg-indigo-600 rounded-2xl flex items-center justify-center text-white text-xl font-bold shadow-lg shadow-indigo-100">
-                        <?php echo strtoupper(substr($partnerName, 0, 1)); ?>
-                    </div>
-                    <div>
-                        <h3 class="font-extrabold text-slate-900 text-lg leading-tight"><?php echo htmlspecialchars($partnerName); ?></h3>
-                        <p class="text-indigo-600 font-bold text-sm"><?php echo htmlspecialchars($partnerPhone); ?></p>
-                    </div>
-                    <a href="tel:<?php echo $partnerPhone; ?>" class="ml-auto bg-white w-12 h-12 rounded-2xl flex items-center justify-center shadow-sm text-emerald-500 border border-slate-100 hover:scale-110 active:scale-95 transition-all">
-                        <i class="fas fa-phone-alt"></i>
-                    </a>
-                </div>
-            </div>
-
-            <div class="p-8">
-                <div class="space-y-6 relative">
-                    <div class="absolute left-[11px] top-2 w-[2px] h-12 bg-slate-100"></div>
-                    
-                    <div class="flex gap-4 items-start">
-                        <div class="w-6 h-6 rounded-full bg-slate-100 border-4 border-white shadow-sm flex items-center justify-center z-10">
-                            <div class="w-2 h-2 rounded-full bg-slate-400"></div>
-                        </div>
-                        <div>
-                            <p class="text-[10px] font-black text-slate-400 uppercase tracking-wider leading-none mb-1">Pickup</p>
-                            <p class="text-sm font-bold text-slate-700"><?php echo htmlspecialchars($data['pickup_location']); ?></p>
-                        </div>
-                    </div>
-
-                    <div class="flex gap-4 items-start">
-                        <div class="w-6 h-6 rounded-full bg-indigo-50 border-4 border-white shadow-sm flex items-center justify-center z-10">
-                            <div class="w-2 h-2 rounded-full bg-indigo-600"></div>
-                        </div>
-                        <div>
-                            <p class="text-[10px] font-black text-indigo-400 uppercase tracking-wider leading-none mb-1">Destination</p>
-                            <p class="text-sm font-bold text-slate-700"><?php echo htmlspecialchars($data['delivery_location']); ?></p>
-                        </div>
-                    </div>
-                </div>
-
-                <div class="mt-10">
-                    <a href="<?php echo $isCustomer ? 'index.php' : 'ItaiRegisteredDriver.php'; ?>" 
-                       class="flex items-center justify-center bg-slate-900 text-white w-full py-5 rounded-[2rem] font-black text-xs tracking-widest hover:bg-slate-800 transition shadow-xl shadow-slate-200 active:scale-95">
-                       BACK TO DASHBOARD
-                    </a>
-                </div>
-            </div>
-        </div>
-
-        <p class="text-center text-[10px] text-slate-400 font-bold uppercase tracking-widest mt-8">
-            <i class="fas fa-shield-check text-emerald-500 mr-1"></i> 100% Secured by MoveMe
-        </p>
     </div>
+
+    <main class="w-full max-w-md px-5 py-8">
+        
+        <div class="glass-card rounded-[2.5rem] p-8 shadow-xl border border-white mb-6 text-center">
+            <p class="text-[11px] font-black text-slate-400 uppercase tracking-widest mb-1">סכום סופי לסגירה</p>
+            <p class="text-5xl font-black text-slate-900 mb-6 italic">₪<?php echo htmlspecialchars($displayPrice); ?></p>
+            
+            <div class="grid grid-cols-2 gap-3 border-t border-slate-100 pt-6">
+                <div class="text-right border-l border-slate-100 pr-2">
+                    <p class="text-[10px] font-black text-slate-400 uppercase mb-1">תאריך הובלה</p>
+                    <p class="text-sm font-extrabold text-slate-700"><?php echo $formattedDate; ?></p>
+                </div>
+                <div class="text-left pl-2">
+                    <p class="text-[10px] font-black text-slate-400 uppercase mb-1">שעת איסוף</p>
+                    <p class="text-sm font-extrabold text-slate-700"><?php echo $formattedTime; ?></p>
+                </div>
+            </div>
+        </div>
+
+        <div class="bg-white rounded-[2rem] p-6 shadow-sm border border-slate-100 mb-6">
+            <h2 class="text-[11px] font-black text-slate-400 uppercase tracking-widest mb-4"><?php echo $partnerHeader; ?></h2>
+            <div class="flex items-center gap-4">
+                <div class="w-14 h-14 bg-indigo-600 rounded-2xl flex items-center justify-center text-white text-xl font-bold">
+                    <?php echo mb_substr($partnerName, 0, 1, 'UTF-8'); ?>
+                </div>
+                <div class="flex-1">
+                    <h3 class="font-bold text-slate-900 leading-tight"><?php echo htmlspecialchars($partnerName); ?></h3>
+                    <p class="text-indigo-600 font-bold text-xs"><?php echo htmlspecialchars($partnerPhone); ?></p>
+                </div>
+                <a href="tel:<?php echo $partnerPhone; ?>" class="w-11 h-11 bg-emerald-50 rounded-xl flex items-center justify-center text-emerald-500 border border-emerald-100 active:scale-90 transition">
+                    <i class="fas fa-phone-alt text-sm"></i>
+                </a>
+            </div>
+        </div>
+
+        <div class="bg-white rounded-[2rem] p-8 shadow-sm border border-slate-100 mb-8">
+            <div class="space-y-8 relative">
+                <div class="absolute right-[11px] top-2 w-[1px] h-[calc(100%-16px)] bg-slate-100"></div>
+                
+                <div class="flex gap-4 items-start relative">
+                    <div class="w-6 h-6 rounded-full bg-white border-4 border-slate-100 shadow-sm flex items-center justify-center z-10">
+                        <div class="w-1.5 h-1.5 rounded-full bg-slate-300"></div>
+                    </div>
+                    <div class="flex-1">
+                        <p class="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">כתובת איסוף</p>
+                        <p class="text-sm font-bold text-slate-700 leading-snug"><?php echo htmlspecialchars($data['pickup_location']); ?></p>
+                        <?php if ($userRole === 'driver'): ?>
+                            <a href="<?php echo $wazePickup; ?>" target="_blank" class="mt-3 inline-flex items-center gap-2 bg-[#33CCFF] text-white px-4 py-2 rounded-xl font-black text-[10px] uppercase shadow-md active:scale-95 transition">
+                                <i class="fab fa-waze"></i> ניווט ליעד
+                            </a>
+                        <?php endif; ?>
+                    </div>
+                </div>
+
+                <div class="flex gap-4 items-start relative">
+                    <div class="w-6 h-6 rounded-full bg-white border-4 border-indigo-50 shadow-sm flex items-center justify-center z-10">
+                        <div class="w-1.5 h-1.5 rounded-full bg-indigo-500"></div>
+                    </div>
+                    <div class="flex-1">
+                        <p class="text-[10px] font-black text-indigo-400 uppercase tracking-widest mb-1">כתובת יעד</p>
+                        <p class="text-sm font-bold text-slate-700 leading-snug"><?php echo htmlspecialchars($data['delivery_location']); ?></p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="space-y-3 pb-10">
+            <?php if ($userRole === 'customer' && $status !== 'paid'): ?>
+                <a href="payment_gateway.php?token=<?php echo $token; ?>" 
+                   class="flex items-center justify-center bg-emerald-500 text-white w-full py-5 rounded-[1.5rem] font-black text-sm tracking-widest uppercase shadow-lg shadow-emerald-100 active:scale-95 transition">
+                    לתשלום מאובטח ₪<?php echo $displayPrice; ?>
+                </a>
+            <?php endif; ?>
+
+            <a href="<?php echo ($userRole === 'customer') ? 'index.php' : 'ItaiRegisteredDriver.php'; ?>" 
+               class="flex items-center justify-center bg-slate-900 text-white w-full py-5 rounded-[1.5rem] font-black text-sm tracking-widest uppercase shadow-xl active:scale-95 transition">
+                חזרה למסך הבית
+            </a>
+        </div>
+
+    </main>
+
+    <p class="text-[10px] text-slate-300 font-bold uppercase tracking-[0.3em] pb-10">MoveMe - הובלה חכמה</p>
 
 </body>
 </html>

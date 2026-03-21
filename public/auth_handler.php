@@ -58,7 +58,7 @@ if ($action === 'send_code') {
             echo json_encode(['success' => false, 'message' => 'Phone already exists.']); 
             exit; 
         }
-        $stmt = $pdo->prepare("INSERT INTO users (username, phone, vehicle_type, is_driver, verification_code) VALUES (?, ?, ?, 1, ?)");
+        $stmt = $pdo->prepare("INSERT INTO users (full_name, phone, vehicle_type, is_driver, verification_code) VALUES (?, ?, ?, 1, ?)");
         $stmt->execute([$_POST['name'], $phone, $_POST['vehicle'], $code]);
     } else {
         $stmt = $pdo->prepare("UPDATE users SET verification_code = ? WHERE phone = ?");
@@ -84,7 +84,7 @@ if ($action === 'verify_code') {
     if ($user) {
         // --- CRITICAL FIX: SET ALL NECESSARY SESSION VARIABLES ---
         $_SESSION['user_id'] = $user['id'];
-        $_SESSION['user_name'] = $user['username'];
+        $_SESSION['user_name'] = $user['full_name'];
         $_SESSION['is_driver'] = (int)$user['is_driver'];
         
         // This line ensures the Chat page recognizes the role correctly

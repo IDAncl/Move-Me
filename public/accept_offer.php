@@ -1,27 +1,30 @@
 <?php
-require_once '../includes/Itaidbh.inc.php';
 session_start();
-
+require_once '../includes/Itaidbh.inc.php';
 header('Content-Type: application/json');
 
-if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    $token = $_POST['token'] ?? '';
-    $driverName = $_POST['driver_name'] ?? '';
+$token = $_POST['token'] ?? '';
+$driverName = $_POST['driver_name'] ?? '';
 
-    if (empty($token) || empty($driverName)) {
-        echo json_encode(['status' => 'error', 'message' => 'Missing information.']);
+if (empty($token) || empty($driverName)) {
+    echo json_encode(['status' => 'error', 'message' => 'מידע חסר: טוקן או שם נהג']);
+    exit;
+}
+
+try {
+    // בדיקה שהסשן קיים ופעיל
+    $stmt = $pdo->prepare("SELECT id FROM chat_sessions WHERE chat_token = ? AND is_active = 1");
+    $stmt->execute([$token]);
+    if (!$stmt->fetch()) {
+        echo json_encode(['status' => 'error', 'message' => 'ההצעה כבר לא רלוונטית או שהצ\'אט נסגר']);
         exit;
     }
 
-    try {
-        // We only update the chosen driver. 
-        // is_active remains 1 so the chat stays open until payment.
-        $updateStmt = $pdo->prepare("UPDATE chat_sessions SET chosen_driver_id = ? WHERE chat_token = ?");
-        $updateStmt->execute([$driverName, $token]);
+    // עדכון הנהג שנבחר
+    $update = $pdo->prepare("UPDATE chat_sessions SET chosen_driver_id = ? WHERE chat_token = ?");
+    $update->execute([$driverName, $token]);
 
-        echo json_encode(['status' => 'success']);
-
-    } catch (Exception $e) {
-        echo json_encode(['status' => 'error', 'message' => $e->getMessage()]);
-    }
+    echo json_encode(['status' => 'success']);
+} catch (Exception $e) {
+    echo json_encode(['status' => 'error', 'message' => $e->getMessage()]);
 }

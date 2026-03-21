@@ -99,6 +99,26 @@ if ((int)$session['is_active'] === 0 && !empty($session['chosen_driver_id'])) {
 
         async function loadMessages() {
             try {
+                // 1. בדיקה אם הסשן נסגר (האם מישהו זכה בעבודה?)
+                const statusRes = await fetch(`get_session_status.php?token=${token}`);
+                const statusData = await statusRes.json();
+
+                if (statusData && statusData.is_active == 0) {
+                    // אם אני הנהג והשם שלי מופיע כנהג הנבחר
+                    if (userRole === 'driver' && statusData.chosen_driver_id === currentUserName) {
+                        alert("🎉 בשעה טובה! הלקוח אישר את ההצעה שלך. עובר לדף סיכום ההזמנה...");
+                        window.location.href = `success.php?token=${token}&status=confirmed`;
+                        return; 
+                    } 
+                    // אם אני נהג אחר והעבודה נסגרה למישהו אחר
+                    else if (userRole === 'driver') {
+                        alert("העבודה הזו כבר נסגרה עם נהג אחר. תודה על ההצעה!");
+                        window.location.href = 'ItaiRegisteredDriver.php';
+                        return;
+                    }
+                }
+
+                // 2. טעינת ההודעות הרגילה
                 const res = await fetch(`get_messages.php?token=${token}`);
                 const messages = await res.json();
                 
@@ -144,7 +164,27 @@ if ((int)$session['is_active'] === 0 && !empty($session['chosen_driver_id'])) {
             const messageValue = messageInput.value.trim();
             const quoteValue = quoteInput ? quoteInput.value.trim() : '';
 
+            // אם אין הודעה ואין מחיר - אל תעשה כלום
             if (!messageValue && !quoteValue) return;
+
+            // --- וולידציה: קפיצות של 10 שקלים ---
+            if (quoteValue !== '') {
+                const priceNum = parseFloat(quoteValue);
+                
+                // בדיקה אם המספר מתחלק ב-10 ללא שארית
+                if (priceNum % 10 !== 0) {
+                    alert("אפשר להזין רק סכומים בעשרות של 10 (למשל: 100, 150, 210 וכו').");
+                    quoteInput.focus();
+                    return;
+                }
+                
+                // בדיקה שהמחיר חיובי
+                if (priceNum <= 0) {
+                    alert("נא להזין מחיר תקין הגדול מ-0.");
+                    quoteInput.focus();
+                    return;
+                }
+            }
 
             const formData = new FormData();
             formData.append('token', token);
@@ -152,26 +192,48 @@ if ((int)$session['is_active'] === 0 && !empty($session['chosen_driver_id'])) {
             formData.append('message', messageValue);
             if (quoteValue) formData.append('quote_price', quoteValue);
 
-            const response = await fetch('send_message.php', { method: 'POST', body: formData });
-            const result = await response.json();
-            
-            if (result.status === 'success') {
-                messageInput.value = '';
-                if (quoteInput) quoteInput.value = '';
-                loadMessages();
+            try {
+                const response = await fetch('send_message.php', { 
+                    method: 'POST', 
+                    body: formData 
+                });
+                const result = await response.json();
+                
+                if (result.status === 'success') {
+                    // ניקוי השדות לאחר הצלחה
+                    messageInput.value = '';
+                    if (quoteInput) quoteInput.value = '';
+                    
+                    // טעינה מיידית של ההודעות כדי שהמשתמש יראה את ההודעה שלו
+                    loadMessages();
+                } else {
+                    alert("שגיאה בשליחת ההודעה: " + result.message);
+                }
+            } catch (err) {
+                console.error("Send message failed:", err);
             }
         };
 
         async function acceptOffer(driverName, price) {
-            if (!confirm(`Hire ${driverName} for ₪${price}? This closes the bidding.`)) return;
+            if (!confirm(`להעסיק את ${driverName} עבור ₪${price}?`)) return;
+            
             const formData = new FormData();
             formData.append('token', token);
             formData.append('driver_name', driverName);
-
-            const res = await fetch('accept_offer.php', { method: 'POST', body: formData });
-            const data = await res.json();
-            if (data.status === 'success') {
-                window.location.href = `checkout.php?token=${token}&amount=${price}`;
+            // חשוב: אנחנו לא סוגרים את הצ'אט כאן, אלא רק מעבירים לדף התשלום/הצלחה
+            
+            try {
+                const res = await fetch('accept_offer.php', { method: 'POST', body: formData });
+                const data = await res.json();
+                
+                if (data.status === 'success') {
+                    // כאן מתבצע הרידירקט האמיתי - וודא ששם הקובץ הוא success.php
+                    window.location.href = `success.php?token=${token}&amount=${price}&status=paid`;
+                } else {
+                    alert("שגיאה: " + data.message);
+                }
+            } catch (e) {
+                console.error("Redirect failed:", e);
             }
         }
 
