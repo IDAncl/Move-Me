@@ -17,6 +17,7 @@ $stmt = $pdo->prepare("
         d.delivery_location,
         d.moving_date,
         d.preferred_time,
+        d.status AS delivery_status,
         cs.chosen_driver_id AS session_driver_name,
         u.full_name AS user_table_name,
         u.phone AS driver_phone,
@@ -34,6 +35,7 @@ $data = $stmt->fetch();
 if (!$data) { die("ההזמנה לא נמצאה."); }
 
 $displayPrice = $data['final_price'] ?? '0';
+$isCompleted = ($data['delivery_status'] === 'completed');
 
 // עיצוב תאריך ושעה לעברית
 $formattedDate = date("d/m/Y", strtotime($data['moving_date']));
@@ -51,7 +53,7 @@ if (!empty($token) && $status === 'paid') {
             $update = $pdo->prepare("UPDATE chat_sessions SET is_active = 0 WHERE chat_token = ?");
             $update->execute([$token]);
 
-            $systemMsg = "🤝 ההזמנה אושרה בסכום של ₪$displayPrice. מועד ההובלה: $formattedDate בשעה $formattedTime.";
+            $systemMsg = "🤝 ההזמנה אושרה בסכום של ₪$displayPrice.";
             $msgStmt = $pdo->prepare("INSERT INTO chat_messages (chat_token, sender_name, message) VALUES (?, 'System', ?)");
             $msgStmt->execute([$token, $systemMsg]);
             $pdo->commit();
@@ -95,8 +97,8 @@ if ($userRole === 'customer') {
     <div class="w-full max-w-md bg-slate-900 p-4 text-white flex items-center justify-between shadow-lg">
         <span class="text-[10px] font-black uppercase tracking-widest">סיכום הובלה</span>
         <div class="flex items-center gap-2">
-            <span class="text-[10px] font-bold"><?php echo ($status === 'paid') ? 'שולם ומאובטח' : 'ממתין לתשלום'; ?></span>
-            <div class="w-2 h-2 rounded-full <?php echo ($status === 'paid') ? 'bg-emerald-400' : 'bg-orange-400'; ?> animate-pulse"></div>
+            <span class="text-[10px] font-bold"><?php echo ($isCompleted) ? 'הובלה הושלמה' : (($status === 'paid') ? 'שולם ומאובטח' : 'ממתין לתשלום'); ?></span>
+            <div class="w-2 h-2 rounded-full <?php echo ($isCompleted || $status === 'paid') ? 'bg-emerald-400' : 'bg-orange-400'; ?> animate-pulse"></div>
         </div>
     </div>
 
@@ -166,11 +168,18 @@ if ($userRole === 'customer') {
         </div>
 
         <div class="space-y-3 pb-10">
-            <?php if ($userRole === 'customer' && $status !== 'paid'): ?>
-                <a href="payment_gateway.php?token=<?php echo $token; ?>" 
-                   class="flex items-center justify-center bg-emerald-500 text-white w-full py-5 rounded-[1.5rem] font-black text-sm tracking-widest uppercase shadow-lg shadow-emerald-100 active:scale-95 transition">
-                    לתשלום מאובטח ₪<?php echo $displayPrice; ?>
-                </a>
+            <?php if ($userRole === 'driver'): ?>
+                <?php if (!$isCompleted): ?>
+                    <button id="completeBtn" onclick="markAsCompleted()" 
+                            class="flex items-center justify-center bg-emerald-600 text-white w-full py-5 rounded-[1.5rem] font-black text-sm tracking-widest uppercase shadow-lg shadow-emerald-100 active:scale-95 transition gap-3">
+                        <i class="fas fa-check-double"></i>
+                        סיימתי את ההובלה
+                    </button>
+                <?php else: ?>
+                    <div class="flex items-center justify-center bg-slate-100 text-slate-400 w-full py-5 rounded-[1.5rem] font-black text-sm tracking-widest uppercase border border-slate-200">
+                        הובלה הושלמה בהצלחה
+                    </div>
+                <?php endif; ?>
             <?php endif; ?>
 
             <a href="<?php echo ($userRole === 'customer') ? 'index.php' : 'ItaiRegisteredDriver.php'; ?>" 
@@ -183,5 +192,39 @@ if ($userRole === 'customer') {
 
     <p class="text-[10px] text-slate-300 font-bold uppercase tracking-[0.3em] pb-10">MoveMe - הובלה חכמה</p>
 
+    <script>
+    async function markAsCompleted() {
+        if (!confirm('האם אתה בטוח שההובלה הסתיימה? הפעולה תעביר אותה להיסטוריה.')) return;
+
+        const btn = document.getElementById('completeBtn');
+        btn.disabled = true;
+        btn.innerHTML = '<i class="fas fa-spinner animate-spin"></i> מעדכן...';
+
+        const formData = new FormData();
+        formData.append('token', '<?php echo $token; ?>');
+
+        try {
+            const res = await fetch('../includes/complete_delivery.php', {
+                method: 'POST',
+                body: formData
+            });
+            const data = await res.json();
+
+            if (data.status === 'success') {
+                alert('ההובלה הושלמה בהצלחה! עובר להיסטוריה.');
+                window.location.href = 'driver_history.php';
+            } else {
+                alert('שגיאה: ' + data.message);
+                btn.disabled = false;
+                btn.innerHTML = '<i class="fas fa-check-double"></i> סיימתי את ההובלה';
+            }
+        } catch (e) {
+            console.error(e);
+            alert('תקלה בתקשורת עם השרת');
+            btn.disabled = false;
+            btn.innerHTML = '<i class="fas fa-check-double"></i> סיימתי את ההובלה';
+        }
+    }
+    </script>
 </body>
 </html>

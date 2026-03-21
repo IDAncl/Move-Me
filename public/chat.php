@@ -97,24 +97,26 @@ if ((int)$session['is_active'] === 0 && !empty($session['chosen_driver_id'])) {
         const userRole = '<?php echo $userRole; ?>';
         const currentUserName = '<?php echo $userName; ?>';
 
+        let isLocked = false; // משתנה גלובלי למניעת רינדור מיותר
+
         async function loadMessages() {
             try {
-                // 1. בדיקה אם הסשן נסגר (האם מישהו זכה בעבודה?)
+                // 1. בדיקה אם הסשן נסגר
                 const statusRes = await fetch(`get_session_status.php?token=${token}`);
                 const statusData = await statusRes.json();
 
-                if (statusData && statusData.is_active == 0) {
-                    // אם אני הנהג והשם שלי מופיע כנהג הנבחר
-                    if (userRole === 'driver' && statusData.chosen_driver_id === currentUserName) {
-                        alert("🎉 בשעה טובה! הלקוח אישר את ההצעה שלך. עובר לדף סיכום ההזמנה...");
-                        window.location.href = `success.php?token=${token}&status=confirmed`;
-                        return; 
-                    } 
-                    // אם אני נהג אחר והעבודה נסגרה למישהו אחר
-                    else if (userRole === 'driver') {
-                        alert("העבודה הזו כבר נסגרה עם נהג אחר. תודה על ההצעה!");
-                        window.location.href = 'ItaiRegisteredDriver.php';
-                        return;
+                // אם הסשן נסגר ועדיין לא נעלנו את הממשק אצלנו
+                if (statusData && statusData.is_active == 0 && !isLocked) {
+                    isLocked = true;
+                    const chatForm = document.getElementById('chat-form');
+                    if (chatForm) {
+                        chatForm.innerHTML = `
+                            <div class="w-full text-center p-6 bg-gray-100 rounded-2xl border-2 border-dashed border-gray-200">
+                                <i class="fas fa-lock text-gray-400 mb-2 text-xl"></i>
+                                <p class="text-gray-500 font-bold text-sm">המכרז הסתיים. הצ'אט נעול לקריאה בלבד.</p>
+                                ${statusData.chosen_driver_id ? `<p class="text-[10px] text-gray-400 uppercase mt-1">נבחר נהג לביצוע העבודה</p>` : ''}
+                            </div>
+                        `;
                     }
                 }
 
@@ -134,11 +136,16 @@ if ((int)$session['is_active'] === 0 && !empty($session['chosen_driver_id'])) {
                     const isMe = msg.sender_name === currentUserName;
                     let quoteHtml = '';
                     if (msg.quote_price) {
+                        // כפתור ה-Accept יופיע רק ללקוח ורק אם הצ'אט לא נעול
+                        const showAcceptBtn = userRole === 'customer' && !isLocked;
+
                         quoteHtml = `<div class="mt-3 overflow-hidden rounded-xl border border-emerald-100 bg-white shadow-sm">
                                         <div class="bg-emerald-50 px-3 py-1.5 text-[10px] font-bold uppercase text-emerald-700">Driver Offer</div>
                                         <div class="p-3 text-center">
                                             <div class="text-xl font-black text-gray-900">₪${msg.quote_price}</div>
-                                            ${userRole === 'customer' ? `<button onclick="acceptOffer('${msg.sender_name}', ${msg.quote_price})" class="mt-2 w-full rounded-lg bg-emerald-600 py-2 text-xs font-bold text-white hover:bg-emerald-700 active:scale-95 transition">Accept This Driver</button>` : '<p class="text-[10px] text-gray-400 mt-1 uppercase font-bold tracking-tighter">Awaiting customer...</p>'}
+                                            ${showAcceptBtn ? 
+                                                `<button onclick="acceptOffer('${msg.sender_name}', ${msg.quote_price})" class="mt-2 w-full rounded-lg bg-emerald-600 py-2 text-xs font-bold text-white hover:bg-emerald-700 active:scale-95 transition">Accept This Driver</button>` : 
+                                                (isLocked && statusData.chosen_driver_id === msg.sender_name ? '<p class="text-emerald-600 font-bold text-[10px] mt-2">נבחר לביצוע!</p>' : '<p class="text-[10px] text-gray-400 mt-1 uppercase font-bold tracking-tighter">Bidding Closed</p>')}
                                         </div>
                                     </div>`;
                     }
@@ -215,27 +222,49 @@ if ((int)$session['is_active'] === 0 && !empty($session['chosen_driver_id'])) {
         };
 
         async function acceptOffer(driverName, price) {
-            if (!confirm(`להעסיק את ${driverName} עבור ₪${price}?`)) return;
+            if (!confirm(`לאשר את ${driverName} עבור ₪${price}? המכרז יסתיים.`)) return;
             
             const formData = new FormData();
             formData.append('token', token);
             formData.append('driver_name', driverName);
-            // חשוב: אנחנו לא סוגרים את הצ'אט כאן, אלא רק מעבירים לדף התשלום/הצלחה
-            
+
             try {
                 const res = await fetch('accept_offer.php', { method: 'POST', body: formData });
                 const data = await res.json();
                 
                 if (data.status === 'success') {
-                    // כאן מתבצע הרידירקט האמיתי - וודא ששם הקובץ הוא success.php
-                    window.location.href = `success.php?token=${token}&amount=${price}&status=paid`;
+                    
+                    
+                    // 2. נציג הודעת תודה יפה על המסך
+                    const chatBox = document.getElementById('chat-box');
+                    const thankYouDiv = document.createElement('div');
+                    thankYouDiv.className = "fixed inset-0 flex items-center justify-center z-50 bg-black/50 backdrop-blur-sm";
+                    thankYouDiv.innerHTML = `
+                        <div class="bg-white p-8 rounded-3xl shadow-2xl text-center max-w-sm mx-4 animate-bounce-in">
+                            <div class="w-20 h-20 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center mx-auto mb-4 text-3xl">
+                                <i class="fas fa-check"></i>
+                            </div>
+                            <h2 class="text-2xl font-black text-gray-900 mb-2">תודה רבה!</h2>
+                            <p class="text-gray-600 mb-6 text-sm">המכרז נסגר בהצלחה</p>
+                            <div class="inline-block h-8 w-8 animate-spin rounded-full border-4 border-solid border-indigo-600 border-r-transparent"></div>
+                        </div>
+                    `;
+                    document.body.appendChild(thankYouDiv);
+
+                    // 3. אחרי 3 שניות - רידירקט לדף ההצלחה
+                    setTimeout(() => {
+                        window.location.href = `success.php?token=${token}&amount=${price}`;
+                    }, 3000);
+
                 } else {
                     alert("שגיאה: " + data.message);
                 }
             } catch (e) {
-                console.error("Redirect failed:", e);
-            }
+            console.error("Full Error Details:", e);
+            // This will show you exactly what went wrong in the browser console
+            alert("חלה שגיאה: " + e.message); 
         }
+                }
 
         setInterval(loadMessages, 3000);
         loadMessages();
