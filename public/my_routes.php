@@ -7,10 +7,8 @@ if (!isset($_SESSION['user_name']) || $_SESSION['is_driver'] != 1) {
     exit();
 }
 
-$currentDriver = $_SESSION['user_name'];
+$currentDriverId = $_SESSION['user_id']; 
 
-// שליפת המסלולים הפעילים בלבד (is_active = 0 זה הצ'אט, אבל status ב-deliveries צריך להיות assigned)
-// הנחה: הובלות פעילות הן כאלו שהסטטוס שלהן אינו 'completed'
 $stmt = $pdo->prepare("
     SELECT d.*, cs.chat_token, cs.driver_notified 
     FROM deliveries d
@@ -18,21 +16,22 @@ $stmt = $pdo->prepare("
     WHERE cs.chosen_driver_id = ? AND d.status != 'completed'
     ORDER BY cs.driver_notified ASC, d.created_at DESC
 ");
-$stmt->execute([$currentDriver]);
+// שימוש ב-ID במקום בשם
+$stmt->execute([$currentDriverId]); 
 $myRoutes = $stmt->fetchAll();
 ?>
 
 <!DOCTYPE html>
-<html lang="en">
+<html lang="he" dir="rtl">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>My Routes - MoveMe</title>
+    <title>המסלולים שלי - MoveMe</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
-    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;800&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Assistant:wght@400;600;800&display=swap" rel="stylesheet">
     <style>
-        body { font-family: 'Plus Jakarta Sans', sans-serif; }
+        body { font-family: 'Assistant', sans-serif; }
         .notification-pulse {
             animation: pulse-red 2s infinite;
         }
@@ -48,19 +47,19 @@ $myRoutes = $stmt->fetchAll();
     <div class="max-w-2xl mx-auto p-6 lg:p-12">
         <div class="flex items-center justify-between mb-10">
             <div>
-                <h1 class="text-3xl font-extrabold tracking-tight text-slate-900">My Routes</h1>
-                <p class="text-slate-500 text-sm mt-1">Manage your confirmed deliveries</p>
+                <h1 class="text-3xl font-extrabold tracking-tight text-slate-900">המסלולים שלי</h1>
+                <p class="text-slate-500 text-sm mt-1">נהל את ההובלות המאושרות שלך</p>
             </div>
             
             <div class="flex items-center gap-3">
                 <a href="driver_history.php" class="flex items-center gap-2 bg-white text-slate-600 px-4 py-2 rounded-2xl text-xs font-bold shadow-sm border border-slate-200 hover:text-indigo-600 transition-all">
                     <i class="fas fa-history"></i>
-                    History
+                    היסטוריה
                 </a>
                 
-                <a href="ItaiRegisteredDriver.php" class="bg-white text-slate-600 h-10 w-10 flex items-center justify-center rounded-full shadow-sm border border-slate-200 hover:text-indigo-600 transition-all">
+                <button onclick="history.go(-1)" class="bg-white text-slate-600 h-10 w-10 flex items-center justify-center rounded-full shadow-sm border border-slate-200 hover:text-indigo-600 transition-all cursor-pointer">
                     <i class="fas fa-arrow-left"></i>
-                </a>
+                </button>
             </div>
         </div>
 
@@ -69,8 +68,8 @@ $myRoutes = $stmt->fetchAll();
                 <div class="bg-slate-50 w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-6">
                     <i class="fas fa-map-marked-alt text-slate-300 text-2xl"></i>
                 </div>
-                <h2 class="text-lg font-bold text-slate-800">No active routes yet</h2>
-                <p class="text-slate-400 text-sm mt-2">When you win a bid, your route details will appear here.</p>
+                <h2 class="text-lg font-bold text-slate-800">אין מסלולים פעילים כרגע</h2>
+                <p class="text-slate-400 text-sm mt-2">כאשר תזכה בהצעה, פרטי המסלול יופיעו כאן.</p>
             </div>
         <?php else: ?>
             <div class="space-y-6">
@@ -80,12 +79,12 @@ $myRoutes = $stmt->fetchAll();
                     <div class="relative bg-white p-6 rounded-[2rem] shadow-[0_8px_30px_rgb(0,0,0,0.04)] border <?php echo $isNew ? 'border-red-100 bg-red-50/30' : 'border-slate-50'; ?> transition-all hover:shadow-[0_8px_30px_rgb(0,0,0,0.08)]">
                         
                         <?php if ($isNew): ?>
-                            <div class="absolute -top-2 -right-2 bg-red-500 text-white text-[10px] font-black px-3 py-1 rounded-full shadow-lg notification-pulse">
+                            <div class="absolute -top-2 -left-2 bg-red-500 text-white text-[10px] font-black px-3 py-1 rounded-full shadow-lg notification-pulse">
                                 משלוח חדש
                             </div>
                         <?php endif; ?>
 
-                        <div class="flex items-start justify-between mb-6">
+                        <div class="flex items-start justify-between mb-6 text-right">
                             <div class="flex gap-4">
                                 <div class="<?php echo $isNew ? 'bg-red-500 text-white' : 'bg-emerald-500/10 text-emerald-600'; ?> w-12 h-12 rounded-2xl flex items-center justify-center shrink-0 transition-colors">
                                     <i class="fas <?php echo $isNew ? 'fa-bell animate-bounce' : 'fa-check-double'; ?> text-lg"></i>
@@ -96,7 +95,7 @@ $myRoutes = $stmt->fetchAll();
                                     </p>
                                     <h3 class="font-bold text-slate-800 leading-tight">
                                         <?php echo htmlspecialchars($route['pickup_location']); ?>
-                                        <i class="fas fa-long-arrow-alt-right mx-2 text-slate-300"></i>
+                                        <i class="fas fa-long-arrow-alt-left mx-2 text-slate-300"></i>
                                         <?php echo htmlspecialchars($route['delivery_location']); ?>
                                     </h3>
                                 </div>
@@ -107,13 +106,13 @@ $myRoutes = $stmt->fetchAll();
                             <a href="../includes/mark_as_read.php?token=<?php echo $route['chat_token']; ?>&redirect=../public/success.php" 
                                class="flex items-center justify-center gap-2 <?php echo $isNew ? 'bg-red-600 hover:bg-red-700' : 'bg-slate-900 hover:bg-slate-800'; ?> text-white py-3 px-4 rounded-2xl text-xs font-bold transition active:scale-95">
                                 <i class="fas fa-user-circle opacity-70"></i>
-                                Client Info
+                                פרטי לקוח
                             </a>
 
                             <a href="chat.php?token=<?php echo $route['chat_token']; ?>" 
                                class="flex items-center justify-center gap-2 bg-indigo-50 text-indigo-600 py-3 px-4 rounded-2xl text-xs font-bold hover:bg-indigo-100 transition active:scale-95">
                                 <i class="fas fa-comment-alt opacity-70"></i>
-                                Open Chat
+                                פתח צ'אט
                             </a>
                         </div>
                     </div>

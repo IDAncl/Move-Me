@@ -10,7 +10,7 @@ const generateDriver = (index, objectType, distance) => {
     const rating = (4 + Math.random()).toFixed(1);
     const reviews = Math.floor(Math.random() * 200) + 20;
     
-    // Base price calculation
+   
     let basePrice = 50;
     if (objectType === 'piano' || objectType === 'appliances') basePrice += 40;
     if (objectType === 'furniture') basePrice += 25;

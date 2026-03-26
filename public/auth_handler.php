@@ -1,5 +1,5 @@
 <?php
-// 1. SET SESSION LIFETIME (MUST be before session_start)
+// 1. SET SESSION LIFETIME
 $timeout = 60 * 60 * 24 * 30; // 30 days
 ini_set('session.gc_maxlifetime', $timeout);
 session_set_cookie_params([
@@ -23,25 +23,27 @@ header('Content-Type: application/json');
 $action = $_POST['action'] ?? '';
 $phone = $_POST['phone'] ?? '';
 
-// --- ISRAELI PHONE FORMATTER ---
+// --- ISRAELI PHONE FORMATTER FOR TWILIO ---
 if (!empty($phone)) {
     $phone = str_replace([' ', '-'], '', $phone);
     if (strpos($phone, '0') === 0) {
-        $phone = '+972' . substr($phone, 1);
+        $phone = '972' . substr($phone, 1);
     }
-    if (strpos($phone, '+') !== 0) {
-        $phone = '+972' . $phone;
-    }
+    $phone = str_replace('+', '', $phone);
+    // Twilio requires 'whatsapp:+countrycode' format
+    $whatsapp_to = "whatsapp:+" . $phone;
 }
 
-// --- TWILIO CONFIG (Replace with your keys) ---
-$sid    = 'AC8ca7a9265227314380f02d348c2f55b9';
-$token  = '89f7c92a49060092b0c14a078fd1facc';
-$from   = '+13185586971';
+// Load environment variables
+$dotenv = Dotenv\Dotenv::createImmutable(__DIR__ . '/../');
+$dotenv->load();
+$sid    = $_ENV['YOUR_TWILIO_SID'];;
+$token  = $_ENV['YOUR_TWILIO_AUTH_TOKEN'];
+$from   = $_ENV['YOUR_TWILIO_PHONE_NUMBER']; 
 
 
 if ($action === 'send_code') {
-    $mode = $_POST['mode'];
+    $mode = $_POST['mode'] ?? 'login';
     $code = str_pad(rand(0, 999999), 6, '0', STR_PAD_LEFT);
     
     $stmt = $pdo->prepare("SELECT id FROM users WHERE phone = ?");
@@ -65,13 +67,24 @@ if ($action === 'send_code') {
         $stmt->execute([$code, $phone]);
     }
 
+    // --- TWILIO WHATSAPP SENDING LOGIC ---
     try {
-        $client = new Client($sid, $token);
-        $client->messages->create($phone, ['from' => $from, 'body' => "Your MoveMe code: $code"]);
-        echo json_encode(['success' => true]); 
+        $twilio = new Client($sid, $token);
+        $message = $twilio->messages->create(
+            $whatsapp_to,
+            [
+                "from" => $from,
+                "body" => "Your MoveMe verification code is: $code"
+            ]
+        );
+
+        if ($message->sid) {
+            echo json_encode(['success' => true]);
+        }
     } catch (Exception $e) {
-        echo json_encode(['success' => false, 'message' => 'SMS failed: ' . $e->getMessage()]);
+        echo json_encode(['success' => false, 'message' => 'Twilio Error: ' . $e->getMessage()]);
     }
+    exit;
 }
 
 if ($action === 'verify_code') {
@@ -82,12 +95,9 @@ if ($action === 'verify_code') {
     $user = $stmt->fetch();
 
     if ($user) {
-        // --- CRITICAL FIX: SET ALL NECESSARY SESSION VARIABLES ---
         $_SESSION['user_id'] = $user['id'];
         $_SESSION['user_name'] = $user['full_name'];
         $_SESSION['is_driver'] = (int)$user['is_driver'];
-        
-        // This line ensures the Chat page recognizes the role correctly
         $_SESSION['user_role'] = ($user['is_driver'] == 1) ? 'driver' : 'customer';
         
         $pdo->prepare("UPDATE users SET verification_code = NULL WHERE id = ?")->execute([$user['id']]);

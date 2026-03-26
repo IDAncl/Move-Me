@@ -11,22 +11,21 @@ $userRole = $isDriverFlag ? 'driver' : 'customer';
 // --- שליפת נתונים מהדאטה-בייס ---
 $stmt = $pdo->prepare("
     SELECT 
-        d.full_name AS customer_name, 
-        d.phone_number AS customer_phone, 
-        d.pickup_location, 
-        d.delivery_location,
-        d.moving_date,
-        d.preferred_time,
-        d.status AS delivery_status,
-        cs.chosen_driver_id AS session_driver_name,
-        u.full_name AS user_table_name,
-        u.phone AS driver_phone,
-        (SELECT quote_price FROM chat_messages 
-         WHERE chat_token = ? AND quote_price > 0 
-         ORDER BY id DESC LIMIT 1) as final_price
+    d.full_name AS customer_name, 
+    d.phone_number AS customer_phone, 
+    d.pickup_location, 
+    d.delivery_location,
+    d.moving_date,
+    d.preferred_time,
+    d.status AS delivery_status,
+    u.full_name AS driver_name,      -- Use the name from the users table
+    u.phone AS driver_phone,
+    (SELECT quote_price FROM chat_messages 
+     WHERE chat_token = ? AND quote_price > 0 
+     ORDER BY id DESC LIMIT 1) as final_price
     FROM chat_sessions cs 
     JOIN deliveries d ON cs.delivery_id = d.id 
-    LEFT JOIN users u ON cs.chosen_driver_id = u.full_name  
+    LEFT JOIN users u ON cs.chosen_driver_id = u.id  -- Fixed: Join on ID, not full_name
     WHERE cs.chat_token = ?
 ");
 $stmt->execute([$token, $token]);
@@ -65,11 +64,23 @@ if (!empty($token) && $status === 'paid') {
     }
 }
 
+// formatting driver phone for display and call link
+$rawDriverPhone = $data['driver_phone'] ?? '';
+$cleanPhone = preg_replace('/[^0-9]/', '', $rawDriverPhone);
+if (strpos($cleanPhone, '972') === 0) {
+    $formatted_Driver_Number = '0' . substr($cleanPhone, 3);
+} elseif (strpos($cleanPhone, '0') === 0) {
+    $formatted_Driver_Number = $cleanPhone;
+} else {
+    $formatted_Driver_Number = $rawDriverPhone ?: 'לא זמין';
+}
+
+
 // הגדרת פרטי השותף להובלה
 $wazePickup = "https://waze.com/ul?q=" . urlencode($data['pickup_location']);
 if ($userRole === 'customer') {
     $partnerHeader = "הנהג שלך";
-    $partnerName = !empty($data['user_table_name']) ? $data['user_table_name'] : $data['session_driver_name'];
+    $partnerName = !empty($data['driver_name']) ? $data['driver_name'] : "נהג לא ידוע";
     $partnerPhone = $data['driver_phone'] ?? 'צור קשר עם התמיכה';
 } else {
     $partnerHeader = "פרטי הלקוח";
@@ -97,7 +108,7 @@ if ($userRole === 'customer') {
     <div class="w-full max-w-md bg-slate-900 p-4 text-white flex items-center justify-between shadow-lg">
         <span class="text-[10px] font-black uppercase tracking-widest">סיכום הובלה</span>
         <div class="flex items-center gap-2">
-            <span class="text-[10px] font-bold"><?php echo ($isCompleted) ? 'הובלה הושלמה' : (($status === 'paid') ? 'שולם ומאובטח' : 'ממתין לתשלום'); ?></span>
+            <span class="text-[10px] font-bold"><?php echo ($isCompleted) ? 'הובלה הושלמה' : (($status === 'paid') ? 'סגור' : 'פתוח'); ?></span>
             <div class="w-2 h-2 rounded-full <?php echo ($isCompleted || $status === 'paid') ? 'bg-emerald-400' : 'bg-orange-400'; ?> animate-pulse"></div>
         </div>
     </div>

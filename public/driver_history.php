@@ -3,14 +3,15 @@ session_start();
 require_once '../includes/Itaidbh.inc.php';
 
 // בדיקה שהמשתמש מחובר ושהוא נהג
-if (!isset($_SESSION['user_name']) || $_SESSION['is_driver'] != 1) {
+// שים לב: השתמשתי ב-user_id כי זה מה שצריך להשוות מול chosen_driver_id
+if (!isset($_SESSION['user_id']) || $_SESSION['is_driver'] != 1) {
     header("Location: login.php");
     exit();
 }
 
-$currentDriver = $_SESSION['user_name'];
+$currentDriverId = $_SESSION['user_id']; // משתמשים ב-ID ולא בשם
 
-// שליפת היסטוריית הובלות שהסתיימו בלבד
+// שליפת היסטוריית הובלות שהסתיימו
 $stmt = $pdo->prepare("
     SELECT d.*, cs.chat_token,
     (SELECT quote_price FROM chat_messages 
@@ -18,10 +19,12 @@ $stmt = $pdo->prepare("
      ORDER BY id DESC LIMIT 1) as final_price
     FROM deliveries d
     JOIN chat_sessions cs ON d.id = cs.delivery_id
-    WHERE cs.chosen_driver_id = ? AND d.status = 'completed'
+    WHERE cs.chosen_driver_id = ? 
+    AND d.status = 'completed'
     ORDER BY d.moving_date DESC
 ");
-$stmt->execute([$currentDriver]);
+
+$stmt->execute([$currentDriverId]);
 $history = $stmt->fetchAll();
 ?>
 
