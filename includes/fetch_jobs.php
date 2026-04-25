@@ -1,10 +1,9 @@
 <?php
-// fetch_jobs.php
+
 session_start();
 require_once 'Itaidbh.inc.php';
 
-// --- Insert your existing $deliveries fetching logic here ---
-// (The SQL query that gets $deliveries based on your filters)
+
 
 if (empty($deliveries)): ?>
     <div class="bg-white p-12 rounded-[2.5rem] text-center border-2 border-dashed border-slate-200">
@@ -15,7 +14,6 @@ if (empty($deliveries)): ?>
     <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <?php foreach ($deliveries as $job): 
             $wazeUrl = "https://waze.com/ul?q=" . urlencode($job['pickup_location']) . "&navigate=yes";
-            // Note: Ensure getTravelTime function is accessible here
             $estDriveTime = "Calculating..."; 
             $chatUrl = "chat.php?token=" . urlencode($job['chat_token']); 
         ?>

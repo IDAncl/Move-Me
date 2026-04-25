@@ -1,12 +1,12 @@
 <?php
-// 1. SET SESSION LIFETIME
-$timeout = 60 * 60 * 24 * 30; // 30 days
+
+$timeout = 60 * 60 * 24 * 30; 
 ini_set('session.gc_maxlifetime', $timeout);
 session_set_cookie_params([
     'lifetime' => $timeout,
     'path' => '/',
     'domain' => '', 
-    'secure' => false,     // Set to true if using HTTPS
+    'secure' => false, 
     'httponly' => true,
     'samesite' => 'Lax'
 ]);
@@ -23,18 +23,18 @@ header('Content-Type: application/json');
 $action = $_POST['action'] ?? '';
 $phone = $_POST['phone'] ?? '';
 
-// --- ISRAELI PHONE FORMATTER FOR TWILIO ---
+
 if (!empty($phone)) {
     $phone = str_replace([' ', '-'], '', $phone);
     if (strpos($phone, '0') === 0) {
         $phone = '972' . substr($phone, 1);
     }
     $phone = str_replace('+', '', $phone);
-    // Twilio requires 'whatsapp:+countrycode' format
+   
     $whatsapp_to = "whatsapp:+" . $phone;
 }
 
-// Load environment variables
+
 $dotenv = Dotenv\Dotenv::createImmutable(__DIR__ . '/../');
 $dotenv->load();
 $sid    = $_ENV['YOUR_TWILIO_SID'];;
@@ -67,7 +67,7 @@ if ($action === 'send_code') {
         $stmt->execute([$code, $phone]);
     }
 
-    // --- TWILIO WHATSAPP SENDING LOGIC ---
+  
     try {
         $twilio = new Client($sid, $token);
         $message = $twilio->messages->create(

@@ -8,7 +8,7 @@ $status = $_GET['status'] ?? '';
 $isDriverFlag = (isset($_SESSION['is_driver']) && $_SESSION['is_driver'] == 1);
 $userRole = $isDriverFlag ? 'driver' : 'customer';
 
-// --- שליפת נתונים מהדאטה-בייס ---
+
 $stmt = $pdo->prepare("
     SELECT 
     d.full_name AS customer_name, 
@@ -36,11 +36,11 @@ if (!$data) { die("ההזמנה לא נמצאה."); }
 $displayPrice = $data['final_price'] ?? '0';
 $isCompleted = ($data['delivery_status'] === 'completed');
 
-// עיצוב תאריך ושעה לעברית
+
 $formattedDate = date("d/m/Y", strtotime($data['moving_date']));
 $formattedTime = date("H:i", strtotime($data['preferred_time']));
 
-// --- לוגיקת עדכון סטטוס (סגירת הצ'אט) ---
+
 if (!empty($token) && $status === 'paid') {
     try {
         $pdo->beginTransaction();
@@ -64,7 +64,7 @@ if (!empty($token) && $status === 'paid') {
     }
 }
 
-// formatting driver phone for display and call link
+
 $rawDriverPhone = $data['driver_phone'] ?? '';
 $cleanPhone = preg_replace('/[^0-9]/', '', $rawDriverPhone);
 if (strpos($cleanPhone, '972') === 0) {
@@ -76,7 +76,7 @@ if (strpos($cleanPhone, '972') === 0) {
 }
 
 
-// הגדרת פרטי השותף להובלה
+
 $wazePickup = "https://waze.com/ul?q=" . urlencode($data['pickup_location']);
 if ($userRole === 'customer') {
     $partnerHeader = "הנהג שלך";

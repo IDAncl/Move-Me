@@ -2,14 +2,14 @@
 session_start();
 require_once '../includes/Itaidbh.inc.php';
 
-// 1. Get Token and Session Data
+
 $token = $_GET['token'] ?? '';
 $userName = $_SESSION['user_name'] ?? 'Guest';
 
 $isDriverFlag = (isset($_SESSION['is_driver']) && $_SESSION['is_driver'] == 1);
 $userRole = $isDriverFlag ? 'driver' : 'customer';
 
-// 2. Database Verification
+
 if (empty($token)) {
     die("Error: No chat token provided.");
 }
@@ -44,7 +44,7 @@ if (!$session) {
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
     <style>
         .no-scrollbar::-webkit-scrollbar { display: none; }
-        body { touch-action: manipulation; } /* מונע זום בלחיצה כפולה */
+        body { touch-action: manipulation; } 
         #chat-box { -webkit-overflow-scrolling: touch; }
     </style>
 </head>

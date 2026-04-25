@@ -22,7 +22,7 @@
         .gradient-bg { background: linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%); }
         .glass-effect { background: rgba(255, 255, 255, 0.98); backdrop-filter: blur(20px); }
         
-        /* Mobile Input Fixes */
+        
         input, select, textarea { font-size: 16px !important; } 
         
         .floating-label-input:focus-within label { color: #4f46e5; }

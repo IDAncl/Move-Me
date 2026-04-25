@@ -12,7 +12,7 @@ if (!isset($_SESSION['user_name']) || $_SESSION['is_driver'] != 1) {
 $token = $_POST['token'] ?? '';
 
 try {
-    // עדכון סטטוס המשלוח בטבלת deliveries דרך ה-token שב-chat_sessions
+   
     $stmt = $pdo->prepare("
         UPDATE deliveries d
         JOIN chat_sessions cs ON d.id = cs.delivery_id

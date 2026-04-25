@@ -2,16 +2,15 @@
 session_start();
 require_once '../includes/Itaidbh.inc.php';
 
-// בדיקה שהמשתמש מחובר ושהוא נהג
-// שים לב: השתמשתי ב-user_id כי זה מה שצריך להשוות מול chosen_driver_id
+
 if (!isset($_SESSION['user_id']) || $_SESSION['is_driver'] != 1) {
     header("Location: login.php");
     exit();
 }
 
-$currentDriverId = $_SESSION['user_id']; // משתמשים ב-ID ולא בשם
+$currentDriverId = $_SESSION['user_id']; 
 
-// שליפת היסטוריית הובלות שהסתיימו
+
 $stmt = $pdo->prepare("
     SELECT d.*, cs.chat_token,
     (SELECT quote_price FROM chat_messages 

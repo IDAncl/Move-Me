@@ -1,6 +1,6 @@
 <?php
 $host = "localhost";
-$dbname = "itai_drivers"; 
+$dbname = "DB"; 
 $dbusername = "root";
 $dbpassword = "";
 

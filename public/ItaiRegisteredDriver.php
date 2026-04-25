@@ -13,7 +13,7 @@ if (!isset($_SESSION['user_id']) || $_SESSION['is_driver'] != 1) {
     exit();
 }
 
-// --- לוגיקת חיפוש וסינון ---
+//  לוגיקת חיפוש וסינון
 $whereClauses = ["(cs.is_active = 1 OR cs.is_active IS NULL)"];
 $params = [];
 
@@ -51,7 +51,7 @@ try {
     $deliveries = [];
 }
 
-// --- לוגיקת רענון AJAX ---
+// לוגיקת רענון AJAX 
 if (isset($_GET['fetch_only'])) {
     if (empty($deliveries)) {
         echo '<div class="bg-white p-8 rounded-3xl text-center border-2 border-dashed border-slate-200 col-span-full">
@@ -133,7 +133,7 @@ $profilePic = "https://ui-avatars.com/api/?name=" . urlencode($driverName) . "&b
     <style>
         body { font-family: 'Assistant', sans-serif; -webkit-tap-highlight-color: transparent; }
         .sidebar-transition { transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1); }
-        input, select { font-size: 16px !important; } /* מונע זום ב-iOS */
+        input, select { font-size: 16px !important; }
     </style>
 </head>
 <body class="bg-slate-50 min-h-[100dvh]">
@@ -225,7 +225,7 @@ $profilePic = "https://ui-avatars.com/api/?name=" . urlencode($driverName) . "&b
     </main>
 
     <script>
-        // Sidebar Logic
+        // sidebar logic
         const menuBtn = document.getElementById('menuBtn');
         const sidebar = document.getElementById('sidebar');
         const overlay = document.getElementById('overlay');
@@ -239,7 +239,7 @@ $profilePic = "https://ui-avatars.com/api/?name=" . urlencode($driverName) . "&b
         menuBtn.addEventListener('click', toggleSidebar);
         overlay.addEventListener('click', toggleSidebar);
 
-        // AJAX Refresh
+        //  refresh
         async function refreshJobs() {
             const container = document.getElementById('jobs-container');
             const status = document.getElementById('refresh-status');
